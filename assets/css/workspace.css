@@ -1,0 +1,129 @@
+/* ---------------------------------------------------------------
+   The reading workspace: tab strip, pane grid, resize gutters,
+   floating panes and focus mode.
+   --------------------------------------------------------------- */
+
+/* ---------- Reading workspace ---------- */
+.rtoolbar{
+  flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px clamp(14px,3vw,28px);border-bottom:1px solid var(--line);
+}
+.rtoolbar .hint{color:var(--ink-3);font-size:12.5px;margin-left:auto}
+.rtoolbar .hint kbd{
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid var(--line-strong);
+  border-bottom-width:2px;border-radius:5px;padding:.1em .35em;background:var(--surface);color:var(--ink-2);
+}
+.wsbar{
+  flex:none;display:flex;align-items:center;gap:8px;
+  padding:8px clamp(14px,3vw,28px);border-bottom:1px solid var(--line);
+  overflow-x:auto;
+}
+.ws-tabs{display:flex;align-items:center;gap:6px;min-width:0}
+.ws-tab{
+  display:inline-flex;align-items:center;
+  border:1px solid var(--line);border-radius:8px;background:var(--bg-tint);overflow:hidden;flex:none;
+}
+.ws-tab [role="tab"]{
+  background:transparent;border:0;font:inherit;font-size:12.5px;font-weight:500;color:var(--ink-2);
+  padding:4px 10px;cursor:pointer;border-radius:0;box-shadow:none;max-width:22ch;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.ws-tab [role="tab"][aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:none}
+.ws-tab.current{border-color:color-mix(in srgb,var(--accent) 45%, var(--line));background:var(--surface)}
+.ws-tab .n{color:var(--ink-3);font-weight:400;font-variant-numeric:tabular-nums;margin-left:5px}
+.ws-close{
+  appearance:none;background:transparent;border:0;border-left:1px solid var(--line);
+  color:var(--ink-3);font:inherit;font-size:11px;line-height:1;padding:6px 7px;cursor:pointer;
+}
+.ws-close:hover{color:var(--danger)}
+.ws-stack{flex:1;min-height:0;display:flex}
+.workspace{
+  flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;
+  padding:12px clamp(10px,2vw,20px) 14px;overflow:auto;
+}
+.pane-row{display:flex;align-items:stretch;flex:1 1 0;min-height:130px}
+.pane{
+  flex:1 1 0;min-width:230px;display:flex;flex-direction:column;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  box-shadow:var(--shadow);overflow:hidden;position:relative;
+}
+.pane.focused{border-color:color-mix(in srgb,var(--accent) 45%, var(--line))}
+.pane-head{
+  flex:none;display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;
+  border-bottom:1px solid var(--line);background:var(--bg-tint);
+}
+.pane-title{flex:1;min-width:0}
+.pane-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pane-sub{font-size:11px;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pane-prog{position:absolute;top:0;left:0;height:2px;width:0;background:var(--accent);z-index:2;transition:width .08s linear}
+.pane-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:26px clamp(16px,3vw,38px) 64px}
+.pane-body .md{margin-top:0}
+.pane-err{padding:26px;color:var(--ink-3);font-size:13.5px}
+.gutter{
+  flex:none;width:12px;align-self:stretch;background:transparent;border:0;padding:0;
+  cursor:col-resize;position:relative;touch-action:none;
+}
+.rgutter{
+  flex:none;height:12px;background:transparent;border:0;padding:0;
+  cursor:row-resize;position:relative;touch-action:none;
+}
+.rgutter::after{
+  content:"";position:absolute;left:24px;right:24px;top:50%;height:1px;
+  transform:translateY(-.5px);background:var(--line-strong);transition:background .15s ease,box-shadow .15s ease;
+}
+.rgutter:hover::after,.rgutter:focus-visible::after,.rgutter.dragging::after{background:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.rgutter:focus-visible{outline:none}
+body.resizing-v{cursor:row-resize;user-select:none}
+.gutter::after{
+  content:"";position:absolute;top:18px;bottom:18px;left:50%;width:1px;
+  transform:translateX(-.5px);background:var(--line-strong);transition:background .15s ease,box-shadow .15s ease;
+}
+.gutter:hover::after,.gutter:focus-visible::after,.gutter.dragging::after{background:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.gutter:focus-visible{outline:none}
+body.resizing{cursor:col-resize;user-select:none}
+.pane-head{cursor:grab}
+.pane-head button{cursor:pointer}
+.pane.floating{
+  position:fixed;z-index:60;flex:none;
+  resize:both;overflow:hidden;
+  min-width:clamp(240px,72vw,300px);min-height:180px;
+  max-width:100vw;max-height:100vh;
+  border-color:var(--line-strong);
+  box-shadow:0 26px 64px -22px rgba(8,12,16,.55), 0 3px 10px rgba(8,12,16,.16);
+}
+.pane.floating.dragging{cursor:grabbing}
+.pane.floating.dragging .pane-head{cursor:grabbing}
+/* A floated document belongs to the reading view only. */
+body:not([data-view="read"]) .pane.floating{display:none}
+.read-empty{
+  flex:1;display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.read-empty .box{max-width:420px;text-align:center}
+.read-empty h2{font-size:17px;font-weight:600;margin:0 0 8px;letter-spacing:-.015em}
+.read-empty p{color:var(--ink-2);margin:0 0 16px}
+
+/* ---------- Focus mode: content only ---------- */
+.zen-exit{
+  position:fixed;top:10px;right:12px;z-index:95;
+  width:30px;height:30px;display:none;align-items:center;justify-content:center;
+  appearance:none;border-radius:8px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink-3);
+  opacity:.35;transition:opacity .18s ease,color .18s ease;
+}
+.zen-exit svg{width:15px;height:15px}
+.zen-exit:hover,.zen-exit:focus-visible{opacity:1;color:var(--ink)}
+body.zen header.app,
+body.zen .rtoolbar,
+body.zen .wsbar,
+body.zen .pane-head,
+body.zen .pane-prog{display:none !important}
+body.zen main{top:0}
+body.zen .workspace{padding:0}
+body.zen .pane-row{min-height:0}
+body.zen .pane{border-radius:0;border-color:var(--line);box-shadow:none}
+body.zen .pane:not(.floating){border-width:0 1px 0 0}
+body.zen .pane-row > .pane:last-child{border-right-width:0}
+body.zen .pane.floating{border-width:1px;border-radius:10px;box-shadow:var(--pop)}
+body.zen .pane-body{padding:34px clamp(18px,4vw,56px) 72px}
+body.zen .zen-exit{display:flex}
+body.zen .gutter::after{top:8px;bottom:8px}

@@ -1,0 +1,89 @@
+/* ---------------------------------------------------------------
+   Home and Notes pages: sections, rows, settings controls, export.
+   --------------------------------------------------------------- */
+
+/* ---------- Home ---------- */
+.home{max-width:840px;margin:0 auto;padding:40px 0 14vh}
+.home h1{font-size:1.75rem;font-weight:600;letter-spacing:-.026em;margin:0 0 6px}
+.lede{color:var(--ink-2);margin:0;max-width:56ch;font-size:15.5px;line-height:1.6}
+.quick{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0 0}
+.sec{margin-top:38px}
+.sec-head{display:flex;align-items:baseline;gap:9px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.sec-title{font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:-.005em}
+.sec-count{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.sec-head .link{margin-left:auto}
+.rows{list-style:none;margin:0;padding:0}
+.row-item{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding-right:4px}
+.row-item:hover{background:var(--bg-tint)}
+.row-main{
+  flex:1;min-width:0;text-align:left;appearance:none;background:none;border:0;
+  font:inherit;color:inherit;cursor:pointer;padding:12px 6px;display:block;
+}
+.row-name{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:500}
+.row-name .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-sub{font-size:12px;color:var(--ink-3);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row-quote{
+  font-family:"Source Serif 4",Georgia,serif;font-size:14.5px;line-height:1.55;color:var(--ink-2);
+  margin-top:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.kind{
+  flex:none;font-size:10.5px;font-weight:500;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+}
+.kind.open{color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent) 40%, var(--line));background:var(--accent-soft)}
+.row-act{flex:none;opacity:0;transition:opacity .12s ease}
+.row-item:hover .row-act,.row-act:focus-within{opacity:1}
+@media (hover:none){.row-act{opacity:1}}
+.setting{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 6px;border-bottom:1px solid var(--line)}
+.setting .label{font-size:14px;font-weight:500}
+.setting .desc{font-size:12px;color:var(--ink-3);margin-top:3px;max-width:52ch;line-height:1.55}
+.setting .ctl{margin-left:auto;flex:none}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{
+  appearance:none;border:0;border-left:1px solid var(--line);background:transparent;
+  font:inherit;font-size:13px;color:var(--ink-2);padding:6px 12px;cursor:pointer;
+  font-variant-numeric:tabular-nums;transition:background .12s ease,color .12s ease;
+}
+.seg button:first-child{border-left:0}
+.seg button:hover{color:var(--ink);background:var(--bg-tint)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.swatches{display:flex;gap:7px;align-items:center}
+.swatch{
+  width:26px;height:26px;border-radius:50%;cursor:pointer;
+  appearance:none;border:1px solid var(--line-strong);padding:0;
+  position:relative;transition:transform .12s ease,box-shadow .12s ease;
+}
+.swatch:hover{transform:scale(1.08)}
+.swatch[aria-checked="true"]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ink-3)}
+.swatch span{position:absolute;inset:0;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.exp-btns{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.start-copy{color:var(--ink-2);margin:14px 0 0;max-width:60ch;line-height:1.65}
+.start-copy code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:var(--bg-tint);border:1px solid var(--line);border-radius:5px;padding:.1em .35em}
+.empty-line{color:var(--ink-3);font-size:13.5px;padding:16px 6px}
+
+/* ---------- Notes page ---------- */
+.notes-page{max-width:840px;margin:0 auto;padding:40px 0 14vh}
+.notes-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.notes-top h1{font-size:1.6rem;font-weight:600;letter-spacing:-.026em;margin:0}
+.notes-top .count{font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ngroup{margin-top:30px}
+.ngroup-head{display:flex;align-items:baseline;gap:9px;padding-bottom:8px;border-bottom:1px solid var(--line);margin:0}
+.ngroup-head .fname{
+  appearance:none;background:none;border:0;padding:0;cursor:pointer;font:inherit;
+  font-size:13.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em;
+}
+.ngroup-head .fname:hover{color:var(--accent-ink)}
+.ngroup-head .fmeta{font-size:12px;color:var(--ink-3);font-weight:400}
+.note{border-bottom:1px solid var(--line);padding:15px 6px}
+.note-quote{
+  font-family:"Source Serif 4",Iowan Old Style,Georgia,serif;
+  font-size:16.5px;line-height:1.62;color:var(--ink);
+  padding-left:14px;border-left:2px solid color-mix(in srgb,var(--hl) 70%, var(--line));
+  white-space:pre-wrap;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+}
+.note.expanded .note-quote{display:block;overflow:visible}
+.note-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px;font-size:12px;color:var(--ink-3)}
+.note-meta .where{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.note-meta .dot{color:var(--line-strong)}
+.note-acts{margin-left:auto;display:flex;gap:6px;flex:none}

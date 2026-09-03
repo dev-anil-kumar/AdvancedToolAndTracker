@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Folio — Markdown Reader</title>
+<meta name="description" content="A quiet Markdown reader. Open local files or public URLs, read several side by side, and keep notes from anything you select.">
+<meta name="color-scheme" content="light dark">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Inter:wght@400;500;600&family=Caveat:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+
+<!-- Application styles. Order matters: tokens define the variables the rest use,
+     and responsive.css has the last word on [hidden]. -->
+<link rel="stylesheet" href="./assets/css/tokens.css">
+<link rel="stylesheet" href="./assets/css/base.css">
+<link rel="stylesheet" href="./assets/css/markdown.css">
+<link rel="stylesheet" href="./assets/css/workspace.css">
+<link rel="stylesheet" href="./assets/css/views.css">
+<link rel="stylesheet" href="./assets/css/canvas.css">
+<link rel="stylesheet" href="./assets/css/responsive.css">
+
+</head>
+<body>
+
+<header class="app">
+  <div class="wordmark"><span class="glyph" aria-hidden="true"></span><span class="name">Folio</span></div>
+
+  <div role="tablist" aria-label="Views">
+    <button role="tab" id="tab-home" aria-selected="true" aria-controls="view-home" tabindex="0">Home</button>
+    <button role="tab" id="tab-read" aria-selected="false" aria-controls="view-read" tabindex="-1">Reading <span class="n" id="tabReadN"></span></button>
+    <button role="tab" id="tab-notes" aria-selected="false" aria-controls="view-notes" tabindex="-1">Notes <span class="n" id="tabNotesN"></span></button>
+    <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="view-canvas" tabindex="-1">Canvas <span class="n" id="tabCanvasN"></span></button>
+  </div>
+
+  <div class="spacer"></div>
+
+  <button class="btn icon ghost" id="themeBtn" type="button" title="Switch theme" aria-label="Switch to dark theme">
+    <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"></svg>
+  </button>
+</header>
+
+<main>
+  <!-- ================= HOME ================= -->
+  <section class="view" role="tabpanel" id="view-home" aria-labelledby="tab-home" tabindex="0">
+    <div class="home">
+      <h1>Folio</h1>
+      <p class="lede">A quiet Markdown reader. Open files from your disk or a public link, read several side by side, and keep a note from anything you select.</p>
+
+      <div class="quick">
+        <button class="btn primary" id="qOpen" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4"/><path d="M20 15v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+          Open file
+        </button>
+        <button class="btn" id="qUrl" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          Open from URL
+        </button>
+        <button class="btn" id="qPaste" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M4 12h16M4 17h11"/></svg>
+          Paste Markdown
+        </button>
+        <button class="btn" id="canvasNew" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M8 12h8M12 8.5v7"/></svg>
+          New drawing
+        </button>
+        <button class="btn ghost" id="qSample" type="button">Sample document</button>
+      </div>
+
+      <section class="sec" id="secRecent" hidden>
+        <div class="sec-head">
+          <span class="sec-title">Recent</span>
+          <span class="sec-count" id="recentCount"></span>
+          <button class="link" id="showAllFiles" type="button" hidden></button>
+        </div>
+        <ul class="rows" id="recentRows"></ul>
+      </section>
+
+      <section class="sec" id="secDrawings" hidden>
+        <div class="sec-head">
+          <span class="sec-title">Drawings</span>
+          <span class="sec-count" id="drawingsCount"></span>
+          <button class="link" id="importDrawing" type="button">Import a drawing</button>
+        </div>
+        <ul class="rows" id="drawingRows"></ul>
+      </section>
+
+      <section class="sec" id="secNotes" hidden>
+        <div class="sec-head">
+          <span class="sec-title">Notes</span>
+          <span class="sec-count" id="notesCount"></span>
+          <button class="link" id="viewAllNotes" type="button">View all notes</button>
+        </div>
+        <ul class="rows" id="notePreview"></ul>
+      </section>
+
+      <section class="sec" id="secSettings">
+        <div class="sec-head"><span class="sec-title">Layout</span></div>
+        <div class="setting">
+          <div>
+            <div class="label">Documents per row</div>
+            <div class="desc">How many documents sit side by side in the reading view before they wrap onto a new row. Drag any divider to fine-tune a row, or drag a document's title bar to float it free of the grid.</div>
+          </div>
+          <div class="ctl seg" id="perRowSeg" role="group" aria-label="Documents per row"></div>
+        </div>
+        <div class="setting">
+          <div>
+            <div class="label">Note highlight</div>
+            <div class="desc">The colour Folio paints over a passage when a note takes you back to it.</div>
+          </div>
+          <div class="ctl swatches" id="hlSwatches" role="radiogroup" aria-label="Note highlight colour"></div>
+        </div>
+      </section>
+
+      <section class="sec" id="secExport" hidden>
+        <div class="sec-head"><span class="sec-title">Export</span><span class="sec-count" id="exportCount"></span></div>
+        <div class="setting">
+          <div>
+            <div class="label">Save as Markdown files</div>
+            <div class="desc" id="exportDesc"></div>
+          </div>
+          <div class="ctl exp-btns">
+            <button class="btn" id="expDocs" type="button">Documents</button>
+            <button class="btn" id="expPasted" type="button">Pasted</button>
+            <button class="btn" id="expNotes" type="button">Notes</button>
+            <button class="btn primary" id="expAll" type="button">Everything</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="secStart">
+        <div class="sec-head"><span class="sec-title">Getting started</span></div>
+        <p class="start-copy">
+          Everything you open is kept in this browser so it's here next time — nothing is uploaded anywhere.
+          Drop a <code>.md</code> file anywhere on the window, or paste a link to a raw Markdown file
+          (a <code>raw.githubusercontent.com</code> URL, a Gist, or any server that allows cross-origin reads).
+          In the reading view, select text and choose <em>Save as note</em> to bookmark a passage —
+          notes remember where they came from and jump you straight back.
+        </p>
+      </section>
+    </div>
+  </section>
+
+  <!-- ================= READING ================= -->
+  <section class="view" role="tabpanel" id="view-read" aria-labelledby="tab-read" tabindex="0" hidden>
+    <div class="rtoolbar">
+      <button class="btn" id="rOpen" type="button">Open file</button>
+      <button class="btn" id="rUrl" type="button">From URL</button>
+      <button class="btn" id="rPaste" type="button">Paste</button>
+      <button class="btn ghost" id="rCloseAll" type="button">Close all</button>
+      <button class="btn ghost" id="zenBtn" type="button" aria-pressed="false" title="Hide everything but the documents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg>
+        Focus
+      </button>
+      <span class="hint">Select text to save a note — or press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>S</kbd></span>
+    </div>
+
+    <div class="wsbar" id="wsbar">
+      <div class="ws-tabs" role="tablist" aria-label="Reading tabs" id="wsTabs"></div>
+      <button class="btn tiny ghost" id="wsAdd" type="button" title="Open a new reading tab">+ New tab</button>
+    </div>
+
+    <div class="ws-stack" id="wsStack"></div>
+    <div class="read-empty" id="readEmpty">
+      <div class="box">
+        <h2>Nothing open in this tab</h2>
+        <p>Open a file, paste some Markdown, or pick something from Home. Open several and they sit side by side — drag a divider to resize, or drag a title bar to float one free. Add another reading tab to keep separate sets of documents.</p>
+        <button class="btn primary" id="emptyOpen" type="button">Open file</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= NOTES ================= -->
+  <section class="view" role="tabpanel" id="view-notes" aria-labelledby="tab-notes" tabindex="0" hidden>
+    <div class="notes-page">
+      <div class="notes-top">
+        <h1>Notes</h1>
+        <span class="count" id="notesTotal"></span>
+        <div class="spacer"></div>
+        <button class="btn" id="saveAllNotes" type="button">Save all</button>
+        <button class="btn" id="expandAll" type="button" aria-pressed="false">Expand all</button>
+      </div>
+      <div id="notesBody"></div>
+      <p class="empty-line" id="notesEmpty">No notes yet. In the reading view, select any passage and choose <em>Save as note</em>.</p>
+    </div>
+  </section>
+  <!-- ================= CANVAS ================= -->
+  <section class="view" role="tabpanel" id="view-canvas" aria-labelledby="tab-canvas" tabindex="0" hidden>
+    <div class="ctoolbar">
+      <div class="ctools" id="cTools" role="toolbar" aria-label="Drawing tools"></div>
+      <button class="btn tiny ghost lock" id="cLock" type="button" aria-pressed="false"
+              title="Keep the tool selected after drawing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      </button>
+
+      <div class="cinks" id="cInks" role="radiogroup" aria-label="Line colour"></div>
+      <div class="cinks fills" id="cFills" role="radiogroup" aria-label="Background colour"></div>
+      <div class="cfonts" id="cFonts" role="group" aria-label="Font"></div>
+
+      <div class="csep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="cUndo" type="button" title="Undo (⌘Z)">Undo</button>
+      <button class="btn tiny ghost" id="cRedo" type="button" title="Redo (⇧⌘Z)">Redo</button>
+      <button class="btn tiny ghost" id="cLabel" type="button" title="Write text inside the selected shape (Enter)">Add text</button>
+      <button class="btn tiny ghost" id="cDetach" type="button" title="Detach the selected arrow from its shapes">Detach</button>
+      <button class="btn tiny ghost" id="cFront" type="button" title="Bring to front (⌘])">Front</button>
+      <button class="btn tiny ghost" id="cBack" type="button" title="Send to back (⌘[)">Back</button>
+      <button class="btn tiny ghost danger" id="cDelete" type="button" title="Delete the selection (Del)">Delete</button>
+
+      <div class="csep" aria-hidden="true"></div>
+
+      <label class="sr" for="cName">Drawing title</label>
+      <input class="cname" id="cName" type="text" autocomplete="off" spellcheck="false" placeholder="Untitled drawing">
+      <span class="cmeta" id="cCount"></span>
+      <span class="cmeta saved" id="cSaved"></span>
+
+      <div class="spacer"></div>
+
+      <button class="btn tiny ghost" id="cZoomOut" type="button" aria-label="Zoom out">−</button>
+      <span class="cmeta" id="cZoom">100%</span>
+      <button class="btn tiny ghost" id="cZoomIn" type="button" aria-label="Zoom in">+</button>
+      <button class="btn tiny ghost" id="cFit" type="button" title="Frame everything">Fit</button>
+
+      <div class="csep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="cNew" type="button">New</button>
+      <button class="btn tiny ghost" id="cImport" type="button">Import</button>
+      <button class="btn tiny ghost" id="cExportJson" type="button" title="Export as a Folio drawing (.json)">Export</button>
+      <button class="btn tiny ghost" id="cExportSvg" type="button" title="Export as a vector image (.svg)">SVG</button>
+      <button class="btn tiny ghost" id="cExportPng" type="button" title="Export as a picture (.png)">PNG</button>
+      <button class="btn tiny ghost" id="cHelp" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+    </div>
+
+    <div class="canvas-host" id="canvasHost" data-tool="select">
+      <svg id="scene" role="img" aria-label="Drawing canvas"></svg>
+
+      <div class="text-edit" id="textEdit" hidden>
+        <textarea id="textEditArea" spellcheck="false" aria-label="Text inside this shape"></textarea>
+      </div>
+
+      <div class="canvas-empty" id="canvasEmpty">
+        <div class="box">
+          <h2>An empty canvas</h2>
+          <p>Press <kbd>R</kbd> for a rectangle, <kbd>C</kbd> for a circle, <kbd>A</kbd> for an arrow, then drag.
+             <kbd>F</kbd> draws a container — anything you put inside travels with it.</p>
+          <p>Shapes line up with each other as you drag them. Press <kbd>?</kbd> for every shortcut.
+             Every object takes text: double-click it, or select it and press <kbd>Enter</kbd>.
+             Select a shape and drag a side dot to pull out an arrow that stays attached.
+             <kbd>N</kbd> gives a text box with no visible edge. <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copies and pastes,
+             corners resize, <kbd>space</kbd>-drag pans, <kbd>shift</kbd> keeps things square.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<input type="file" id="fileInput" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" class="sr" multiple>
+<input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
+
+<div class="selpop" id="selpop" hidden role="group" aria-label="Selection actions">
+  <button class="btn tiny primary" id="selNote" type="button">Save as note</button>
+  <button class="btn tiny ghost" id="selCopy" type="button">Copy</button>
+</div>
+
+<button class="zen-exit" id="zenExit" type="button" title="Leave focus mode (Esc)" aria-label="Leave focus mode" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 4H5.5A1.5 1.5 0 0 0 4 5.5V9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></svg>
+</button>
+
+<div class="toast" id="toast" hidden role="status" aria-live="polite"></div>
+
+<dialog id="urlDlg" aria-labelledby="urlDlgTitle">
+  <div class="dlg-head">
+    <h2 id="urlDlgTitle">Open from URL</h2>
+    <p>A direct link to a Markdown file. Folio downloads it into this browser and renders it.</p>
+  </div>
+  <form class="dlg-body" id="urlForm">
+    <label class="field-label" for="urlField">File URL</label>
+    <input class="input" id="urlField" type="url" inputmode="url" spellcheck="false" autocomplete="off"
+           placeholder="https://raw.githubusercontent.com/user/repo/main/README.md" required>
+    <p class="dlg-note">GitHub <code>/blob/</code> links are converted to their raw form automatically. The server must allow
+      cross-origin reads (<code>Access-Control-Allow-Origin</code>) — raw.githubusercontent.com, Gists, and GitHub Pages do.</p>
+    <div class="dlg-err" id="urlErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" id="urlSubmit" type="submit">Download &amp; read</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="shortcutsDlg" aria-labelledby="shortcutsTitle">
+  <div class="dlg-head">
+    <h2 id="shortcutsTitle">Drawing shortcuts</h2>
+    <p>Everything the canvas can do, on one page.</p>
+  </div>
+  <div class="dlg-body keys" id="shortcutsBody"></div>
+  <div class="dlg-acts" style="padding: 0 20px 18px">
+    <button class="btn" type="button" data-close>Close</button>
+  </div>
+</dialog>
+
+<dialog id="pasteDlg" aria-labelledby="pasteDlgTitle">
+  <div class="dlg-head">
+    <h2 id="pasteDlgTitle">Paste Markdown</h2>
+    <p>Saved to your library like any other document, so you can come back to it.</p>
+  </div>
+  <form class="dlg-body" id="pasteForm">
+    <label class="field-label" for="pasteTitle">Title <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+    <input class="input" id="pasteTitle" type="text" autocomplete="off" placeholder="Taken from the first heading if left blank">
+    <label class="field-label" for="pasteText">Markdown</label>
+    <textarea class="input" id="pasteText" spellcheck="false" placeholder="# Notes from the meeting…" required></textarea>
+    <div class="dlg-err" id="pasteErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save &amp; read</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Sample document: authored in Markdown, so it doubles as a live demo of the renderer -->
+<script id="sample-md" type="text/markdown">
+# Folio
+
+A quiet place to read Markdown. Everything happens in this browser tab — no accounts,
+no uploads, no server.
+
+> Reading is a private act. Folio keeps the interface out of the way and gives the
+> words the whole page.
+
+## Getting started
+
+There are three ways in:
+
+1. **Open a local file** — click *Open file*, or drag a `.md` file onto the window.
+2. **Open from a URL** — any direct link to a Markdown file that allows cross-origin
+   reads, such as a `raw.githubusercontent.com` URL.
+3. **Paste Markdown** — paste text and give it a title; it's saved like any other document.
+
+Everything you open lands on the Home page, so you can pick it back up later.
+
+## Reading several at once
+
+Open a second document and the two sit side by side. Drag the divider between them to
+give one more room, or close a pane you're done with. On a narrow screen the panes
+stack instead, and each one can be dragged taller from its bottom edge.
+
+## Notes
+
+Select any passage in a document and choose **Save as note**. Folio records the text,
+the document it came from, and the section it sits in — the **Notes** page lists them
+all, four lines at a time, and clicking one reopens the document at exactly that spot.
+
+- [x] Select text, save a note
+- [x] Jump back to it later
+- [ ] Read something long and good
+
+## What it renders
+
+Everything you'd expect from GitHub-Flavored Markdown.
+
+### Text
+
+You get **bold**, *italic*, ***both at once***, ~~strikethrough~~, `inline code`, and
+[links](https://commonmark.org) that open in a new tab. Long paragraphs are capped near
+70 characters per line, which is roughly where the eye stops having to hunt for the
+start of the next line.
+
+### Tables
+
+| Piece | Library | Why |
+| --- | --- | --- |
+| Parsing | marked | Fast, GFM-complete, no build step |
+| Safety | DOMPurify | Strips scripts and event handlers from rendered HTML |
+| Code | highlight.js | 190+ languages, dark theme in both app themes |
+| Storage | IndexedDB | Keeps documents and notes in this browser |
+
+### Code
+
+Fenced blocks stay dark in light mode — code reads better on a dark ground, and it
+gives the page a clear second texture.
+
+```js
+// The whole rendering pipeline, start to finish.
+function render(markdown) {
+  const html  = marked.parse(markdown, { gfm: true });
+  const clean = DOMPurify.sanitize(html);
+  article.innerHTML = clean;
+  article.querySelectorAll('pre code').forEach(hljs.highlightElement);
+}
+```
+
+```python
+def word_count(text: str) -> dict[str, int]:
+    counts = {}
+    for word in text.lower().split():
+        counts[word] = counts.get(word, 0) + 1
+    return counts
+```
+
+### Images
+
+Images scale to the measure and get gentle rounded corners:
+
+![A placeholder graphic](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgNjQwIDIwMCI+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiMxZjVmN2QiLz48Y2lyY2xlIGN4PSIxMTIiIGN5PSIxMDAiIHI9IjQ2IiBmaWxsPSIjYThjZmUwIi8+PHJlY3QgeD0iMjAwIiB5PSI3MCIgd2lkdGg9IjM1MiIgaGVpZ2h0PSIxMiIgcng9IjYiIGZpbGw9IiNhOGNmZTAiLz48cmVjdCB4PSIyMDAiIHk9IjEwMCIgd2lkdGg9IjI0OCIgaGVpZ2h0PSIxMiIgcng9IjYiIGZpbGw9IiM3YWE4YmUiLz48cmVjdCB4PSIyMDAiIHk9IjEzMCIgd2lkdGg9IjMwMCIgaGVpZ2h0PSIxMiIgcng9IjYiIGZpbGw9IiM1YjhiYTMiLz48L3N2Zz4K)
+
+---
+
+## Where your data lives
+
+Documents and notes are stored with IndexedDB, in this browser, on this device. Nothing
+leaves the page except the request that fetches a URL you asked for. Clearing site data
+clears Folio.
+
+*Happy reading.*
+</script>
+
+<!-- ---------- Libraries (pinned) ---------- -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+<script type="module" src="./assets/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "folio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local-first Markdown reader. Static, no build step, deployable to GitHub Pages.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node tests/smoke.mjs",
+    "lint": "eslint .",
+    "check": "npm run lint && npm test"
+  },
+  "devDependencies": {
+    "dompurify": "3.1.6",
+    "eslint": "^9.9.0",
+    "fake-indexeddb": "5.0.2",
+    "globals": "^15.9.0",
+    "highlight.js": "11.9.0",
+    "jsdom": "24.1.0",
+    "marked": "12.0.2"
+  }
+}

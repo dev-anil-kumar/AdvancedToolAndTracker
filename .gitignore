@@ -1,0 +1,25 @@
+# Dependencies — dev only. The app itself has no build step and ships as source.
+node_modules/
+
+# Editor and OS cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs and caches
+*.log
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Local scratch — not part of the app
+scratch/
+*.local.*
