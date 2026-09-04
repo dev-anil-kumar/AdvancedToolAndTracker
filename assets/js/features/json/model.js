@@ -10,7 +10,9 @@
  * one and hands back its parsed value; every view then treats it as structure.
  * The nesting can repeat, so an embedded document may contain another.
  */
-import { JSON_INDENT, JSON_PEEK, TABLE_COLS_MAX, TABLE_SCAN } from '../../core/config.js';
+import {
+  JSON_INDENT, JSON_PEEK, JSON_SEARCH_HITS, TABLE_COLS_MAX, TABLE_DEPTH, TABLE_SCAN
+} from '../../core/config.js';
 
 /* ---------- Types ---------- */
 
@@ -257,6 +259,69 @@ export function peek(value, max = JSON_PEEK) {
 
 /* ---------- Paths ---------- */
 
+/**
+ * A path is a list of segments: { key } for a member, { embedded: true } for
+ * the step from a string into the document it holds. pathKey() flattens one
+ * into a string so it can go in a Set — every view identifies nodes this way.
+ */
+export const PATH_SEP = '\u0000';
+export const pathKey = (segments) =>
+  segments.map(seg => (seg.embedded ? '»' : String(seg.key))).join(PATH_SEP);
+
+/**
+ * A value's children, whether they are its own or come out of an embedded
+ * document. `base` is the path its children hang off — one step longer than
+ * `segments` when a string had to be opened to reach them.
+ */
+export function childrenOf(value, segments) {
+  const inner = typeof value === 'string' ? embedded(value) : undefined;
+  const branch = inner !== undefined ? inner : (isBranch(value) ? value : null);
+  if (!branch) return { branch: null, base: segments, children: [] };
+  const base = inner !== undefined ? segments.concat([{ embedded: true }]) : segments;
+  const keys = Array.isArray(branch) ? branch.map((_, i) => i) : Object.keys(branch);
+  return {
+    branch,
+    base,
+    children: keys.map(k => ({ key: k, value: branch[k], segments: base.concat([{ key: k }]) }))
+  };
+}
+
+/**
+ * The paths a search leaves visible: every key or value that matches, and
+ * every ancestor of one. Bounded twice over — by hits and by nodes walked —
+ * so a search on a very large document answers rather than hangs.
+ *
+ * Shared, because the tree and the graph must agree on what a match is.
+ */
+export function matchPaths(root, query, opts) {
+  const options = opts || {};
+  const limit = options.limit || JSON_SEARCH_HITS;
+  let budget = options.budget || 400000;
+  const needle = String(query || '').trim().toLowerCase();
+  const paths = new Set();
+  let hits = 0;
+  if (!needle) return { paths: null, hits: 0 };
+  const test = (v) => String(v).toLowerCase().includes(needle);
+
+  (function walk(value, segments, trail) {
+    if (budget-- <= 0 || hits >= limit) return;
+    const { branch, children } = childrenOf(value, segments);
+    const last = segments.length ? segments[segments.length - 1] : null;
+    const keyHit = last && !last.embedded && test(last.key);
+    const leafHit = !branch && test(value === null ? 'null' : value);
+    if (keyHit || leafHit) {
+      hits++;
+      paths.add(pathKey(segments));
+      trail.forEach(p => paths.add(p));
+    }
+    if (!branch) return;
+    const nextTrail = trail.concat([pathKey(segments)]);
+    children.forEach(child => walk(child.value, child.segments, nextTrail));
+  })(root, [], []);
+
+  return { paths, hits };
+}
+
 /** JavaScript accessor notation, so a copied path can be pasted into code. */
 export function pathString(segments) {
   return segments.reduce((acc, seg) => {
@@ -294,17 +359,53 @@ export function tables(root, limit = 60) {
   return found;
 }
 
-/** The columns of an array of objects: the union of its keys, first seen first. */
+/**
+ * One record, flattened to the fields a table can show.
+ *
+ * A column per *leaf*, not per top-level key: `{recording: {bytes, format}}`
+ * becomes `recording.bytes` and `recording.format`, because a column reading
+ * "{2}" tells the reader nothing. Embedded JSON strings are walked into for
+ * the same reason. Arrays are left whole — flattening one list of forty into
+ * forty columns would wreck the table it was meant to fix.
+ *
+ * Returns label → { value, segments }, the segments being the real path, so a
+ * cell can still hand the reader back to the tree.
+ */
+export function flattenRow(row, maxDepth = TABLE_DEPTH) {
+  const out = new Map();
+  (function walk(value, label, segments, depth) {
+    const inner = typeof value === 'string' ? embedded(value) : undefined;
+    const here = inner !== undefined ? inner : value;
+    const base = inner !== undefined ? segments.concat([{ embedded: true }]) : segments;
+    const plain = isBranch(here) && !Array.isArray(here);
+    const keys = plain ? Object.keys(here) : [];
+    if (plain && keys.length && depth < maxDepth) {
+      keys.forEach(k => walk(here[k], label ? label + '.' + k : String(k),
+        base.concat([{ key: k }]), depth + 1));
+      return;
+    }
+    out.set(label, { value: here, segments: base });
+  })(row, '', [], 0);
+  return out;
+}
+
+/**
+ * The columns of an array of records: the union of their flattened fields,
+ * first seen first. Capped, and it says how many it had to leave out.
+ */
 export function columnsOf(rows) {
   const cols = [];
   const seen = new Set();
+  let dropped = 0;
   rows.slice(0, TABLE_SCAN).forEach(row => {
-    if (!isBranch(row) || Array.isArray(row)) { if (!seen.has('')) { seen.add(''); cols.unshift(''); } return; }
-    Object.keys(row).forEach(k => {
-      if (!seen.has(k) && cols.length < TABLE_COLS_MAX) { seen.add(k); cols.push(k); }
+    flattenRow(row).forEach((_, label) => {
+      if (seen.has(label)) return;
+      seen.add(label);
+      if (cols.length < TABLE_COLS_MAX) cols.push(label);
+      else dropped++;
     });
   });
-  return cols;
+  return { cols, dropped, scanned: Math.min(rows.length, TABLE_SCAN) };
 }
 
 /** Sort comparator that keeps numbers numeric and pushes blanks to the end. */

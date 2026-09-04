@@ -297,6 +297,11 @@
       <label class="sr" for="jTables">Array to tabulate</label>
       <select class="jpick" id="jTables" hidden></select>
 
+      <button class="btn tiny ghost" id="jZoomOut" type="button" aria-label="Zoom out">−</button>
+      <span class="jmeta" id="jZoom">100%</span>
+      <button class="btn tiny ghost" id="jZoomIn" type="button" aria-label="Zoom in">+</button>
+      <button class="btn tiny ghost" id="jFit" type="button" title="Frame the whole map">Fit</button>
+
       <div class="jsep" aria-hidden="true"></div>
 
       <button class="btn tiny ghost" id="jFormat" type="button" title="Re-indent the text">Format</button>
@@ -329,6 +334,7 @@
     <div class="jstage" id="jStage">
       <div class="jhost" id="jTreeHost" role="tree" aria-label="JSON tree" hidden></div>
       <div class="jhost jtable-host" id="jTableHost" hidden></div>
+      <div class="jhost jgraph-host" id="jGraphHost" hidden></div>
       <div class="jhost jcode-host" id="jCodeHost" hidden></div>
       <div class="jhost" id="jRawHost" hidden><pre class="jraw" id="jRaw"></pre></div>
       <div class="jhost jedit-host" id="jEditHost" hidden>
@@ -340,11 +346,11 @@
           <h2>Nothing open</h2>
           <p>Open a <code>.json</code> file, paste JSON, or drop a file anywhere on the window.
              Everything you open is kept in this browser, like any other document.</p>
-          <p>Five ways to look at the same data: a collapsible <strong>tree</strong>, any array of objects
-             as a <strong>table</strong>, the formatted and coloured <strong>code</strong>, the
-             <strong>raw</strong> text exactly as it arrived, and an <strong>edit</strong> pane that tells
-             you where the syntax broke. JSON hidden inside a string is recognised and opens like the
-             document it is.</p>
+          <p>Six ways to look at the same data: a collapsible <strong>tree</strong>, any array of
+             records as a <strong>table</strong>, a <strong>graph</strong> of the document's shape, the
+             formatted and coloured <strong>code</strong>, the <strong>raw</strong> text exactly as it
+             arrived, and an <strong>edit</strong> pane that tells you where the syntax broke. JSON
+             hidden inside a string is recognised and opens like the document it is.</p>
           <div class="empty-acts">
             <button class="btn primary" id="jsonEmptyOpen" type="button">Open file</button>
             <button class="btn" id="jsonEmptyPaste" type="button">Paste JSON</button>
@@ -483,9 +489,32 @@
   "servercall_sync_success_count": 8934,
   "last_sync_error": null,
   "notes": "Two lines here,\nso the tree has something multi-line to show.",
-  "synced_call_details_queue": "[{\"callStartTime\": \"Sep 2, 2026 12:17:00\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"88cf5adc-957e-4b85-83bc-013966dce3f6\", \"creationTimeMillis\": 1788331619848, \"duration\": 0, \"lastCallID\": \"9418\", \"leadIdentifier\": \"ipt::398895\", \"sanitizedCustomerNumber\": \"+917200050573\"}, {\"billedDuration\": 0, \"callEndTime\": \"Sep 2, 2026 12:18:09\", \"callStartTime\": \"Sep 2, 2026 12:18:08\", \"callState\": \"ANSWERED\", \"callStatus\": \"missed\", \"callType\": \"outbound\", \"callUUID\": \"1d24bcf4-c37b-4984-9b74-6ccc0109ccdb\", \"creationTimeMillis\": 1788331688105, \"duration\": 1, \"eventType\": \"end_call\", \"lastCallID\": \"9419\", \"leadIdentifier\": \"ipt::397300\", \"sanitizedCustomerNumber\": \"+918778768487\"}, {\"billedDuration\": 0, \"callStartTime\": \"Sep 2, 2026 12:18:24\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"ca75d215-f0b7-48a0-8684-26af99691d91\", \"creationTimeMillis\": 1788331703956, \"duration\": 0, \"eventType\": \"start_call\", \"lastCallID\": \"9420\", \"leadIdentifier\": \"ipt::398982\", \"sanitizedCustomerNumber\": \"+919486634357\"}, {\"billedDuration\": 42, \"callEndTime\": \"Sep 2, 2026 12:20:11\", \"callStartTime\": \"Sep 2, 2026 12:19:29\", \"callState\": \"ANSWERED\", \"callStatus\": \"completed\", \"callType\": \"outbound\", \"callUUID\": \"7b1e0a64-2c58-4d2a-9f0b-5c9d3a17e442\", \"creationTimeMillis\": 1788331769004, \"duration\": 42, \"eventType\": \"end_call\", \"lastCallID\": \"9421\", \"leadIdentifier\": \"ipt::399104\", \"recording\": {\"bytes\": 168432, \"format\": \"mp3\", \"synced\": true}, \"sanitizedCustomerNumber\": \"+919845123300\"}]",
+  "synced_call_details_queue": "[{\"callStartTime\": \"Sep 2, 2026 12:17:00\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"88cf5adc-957e-4b85-83bc-013966dce3f6\", \"creationTimeMillis\": 1788331619848, \"duration\": 0, \"lastCallID\": \"9418\", \"leadIdentifier\": \"ipt::398895\", \"sanitizedCustomerNumber\": \"+917200050573\"}, {\"billedDuration\": 0, \"callEndTime\": \"Sep 2, 2026 12:18:09\", \"callStartTime\": \"Sep 2, 2026 12:18:08\", \"callState\": \"ANSWERED\", \"callStatus\": \"missed\", \"callType\": \"outbound\", \"callUUID\": \"1d24bcf4-c37b-4984-9b74-6ccc0109ccdb\", \"creationTimeMillis\": 1788331688105, \"duration\": 1, \"eventType\": \"end_call\", \"lastCallID\": \"9419\", \"leadIdentifier\": \"ipt::397300\", \"sanitizedCustomerNumber\": \"+918778768487\"}, {\"billedDuration\": 0, \"callStartTime\": \"Sep 2, 2026 12:18:24\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"ca75d215-f0b7-48a0-8684-26af99691d91\", \"creationTimeMillis\": 1788331703956, \"duration\": 0, \"eventType\": \"start_call\", \"lastCallID\": \"9420\", \"leadIdentifier\": \"ipt::398982\", \"sanitizedCustomerNumber\": \"+919486634357\"}, {\"billedDuration\": 42, \"callEndTime\": \"Sep 2, 2026 12:20:11\", \"callStartTime\": \"Sep 2, 2026 12:19:29\", \"callState\": \"ANSWERED\", \"callStatus\": \"completed\", \"callType\": \"outbound\", \"callUUID\": \"7b1e0a64-2c58-4d2a-9f0b-5c9d3a17e442\", \"creationTimeMillis\": 1788331769004, \"duration\": 42, \"eventType\": \"end_call\", \"lastCallID\": \"9421\", \"leadIdentifier\": \"ipt::399104\", \"recording\": {\"bytes\": 168432, \"format\": \"mp3\", \"synced\": true}, \"sanitizedCustomerNumber\": \"+919845123300\", \"tags\": [\"retry\", \"billed\"]}]",
   "retry_envelope": "{\"queuedAt\": 1788331770000, \"payload\": \"{\\\"attempt\\\": 3, \\\"backoff\\\": [\\\"2s\\\", \\\"8s\\\", \\\"32s\\\"], \\\"lastError\\\": \\\"socket hang up\\\"}\"}",
   "truncated_payload": "[{\"callStartTime\":\"Sep 2, 2026 12:18:37\",\"callState\":\"STARTED\",\"callUUID\":\"3f0c",
+  "sync_batches": [
+    {
+      "batchId": "b-1",
+      "startedAt": "Sep 2, 2026 12:15:00",
+      "counts": {
+        "ok": 41,
+        "failed": 2
+      },
+      "meta": "{\"attempt\": 1, \"lastError\": null}"
+    },
+    {
+      "batchId": "b-2",
+      "startedAt": "Sep 2, 2026 12:31:00",
+      "counts": {
+        "ok": 12,
+        "failed": 7
+      },
+      "meta": "{\"attempt\": 3, \"lastError\": \"socket hang up\"}",
+      "tags": [
+        "retry"
+      ]
+    }
+  ],
   "thresholds": {
     "maxQueue": 500,
     "flushEveryMs": 15000,

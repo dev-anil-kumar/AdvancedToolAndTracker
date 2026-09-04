@@ -78,7 +78,8 @@ export const FONTS = [
 export const JSON_INDENT = 2;         // spaces, everywhere JSON is written out
 export const JSON_CHUNK = 200;        // tree children rendered per batch
 export const TABLE_CHUNK = 100;       // table rows rendered per batch
-export const TABLE_COLS_MAX = 40;     // columns a table will show
+export const TABLE_COLS_MAX = 120;    // columns a table will show
+export const TABLE_DEPTH = 4;         // levels of nesting flattened into columns
 export const TABLE_SCAN = 400;        // rows sampled to work out the columns
 export const JSON_OPEN_DEPTH = 2;     // levels expanded when a document opens
 export const JSON_CODE_MAX = 500000;  // chars before the code view stops colouring
@@ -88,14 +89,26 @@ export const STRING_INLINE = 240;     // chars of a string shown on its own row
 export const STRING_FULL = 20000;     // chars of it shown when the row is opened
 export const JSON_SAVE_MS = 600;      // debounce before an edit reaches storage
 
-/** The five ways to look at a document. Order is the order of the switch. */
+/** The six ways to look at a document. Order is the order of the switch. */
 export const JSON_MODES = [
   { key: 'tree',  label: 'Tree',  hint: 'Collapsible outline — the default reading view' },
-  { key: 'table', label: 'Table', hint: 'Any array of objects, as rows and columns' },
+  { key: 'table', label: 'Table', hint: 'Any array of records, as rows and columns' },
+  { key: 'graph', label: 'Graph', hint: 'The shape of the document, drawn as a map' },
   { key: 'code',  label: 'Code',  hint: 'Formatted and coloured, with line numbers' },
   { key: 'raw',   label: 'Raw',   hint: 'Exactly the text you opened, untouched' },
   { key: 'edit',  label: 'Edit',  hint: 'Change the text, with live validation' }
 ];
+
+/* ---------- The graph ---------- */
+export const GRAPH_NODE_W = 190;      // scene units; the label is sized to fit
+export const GRAPH_NODE_H = 27;
+export const GRAPH_GAP_X = 58;        // room for the link between two levels
+export const GRAPH_GAP_Y = 9;
+export const GRAPH_FANOUT = 14;       // children drawn per branch before "+N more"
+export const GRAPH_MAX_NODES = 700;   // a map of more than this is not a map
+export const GRAPH_OPEN_DEPTH = 2;
+export const GRAPH_ZOOM_MIN = 0.15;
+export const GRAPH_ZOOM_MAX = 6;
 
 /* ---------- Note highlight palette ---------- */
 export const HIGHLIGHTS = [

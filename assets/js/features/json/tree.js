@@ -12,14 +12,12 @@
  * 3. *Editing is opt-in.* Reading is the default and stays untouched — no input
  *    boxes, no controls in the margin — until the reader asks for them.
  */
-import { JSON_CHUNK, JSON_SEARCH_HITS, STRING_FULL, STRING_INLINE } from '../../core/config.js';
+import { JSON_CHUNK, STRING_FULL, STRING_INLINE } from '../../core/config.js';
 import { el } from '../../core/dom.js';
 import {
-  childCount, embedded, isBranch, looksTruncated, pathString, peek, summarise, typeOf
+  PATH_SEP as SEP, childCount, embedded, isBranch, looksTruncated, matchPaths,
+  pathKey as keyOf, pathString, peek, summarise, typeOf
 } from './model.js';
-
-const SEP = '\u0000';
-const keyOf = (segments) => segments.map(s => (s.embedded ? '»' : String(s.key))).join(SEP);
 
 /**
  * @param {object} opts
@@ -155,47 +153,20 @@ export function createTree(opts) {
 
   /* ---------- Search ---------- */
 
-  /**
-   * Collect the paths a query leaves visible: every match, and every ancestor
-   * of one. Bounded twice over — by hits and by nodes walked — so a search on a
-   * very large document answers rather than hangs.
-   */
+  /** Ask model.js what matches, then let only those paths through. */
   function runSearch(text) {
     query = String(text || '').trim();
-    hits = 0;
     if (!query) {
       keep = null;
+      hits = 0;
       if (openBefore) { open = openBefore; openBefore = null; }
       return 0;
     }
     if (!openBefore) openBefore = new Set(open);
-    const needle = query.toLowerCase();
-    const found = new Set();
-    let budget = 400000;
-    const test = (v) => String(v).toLowerCase().includes(needle);
-
-    (function walk(value, segments, trail) {
-      if (budget-- <= 0 || hits >= JSON_SEARCH_HITS) return;
-      const inner = typeof value === 'string' ? embedded(value) : undefined;
-      const branch = isBranch(value) ? value : inner;
-      const last = segments.length ? segments[segments.length - 1] : null;
-      const keyHit = last && !last.embedded && test(last.key);
-      const leafHit = !branch && test(value === null ? 'null' : value);
-
-      if (keyHit || leafHit) {
-        hits++;
-        found.add(keyOf(segments));
-        trail.forEach(p => found.add(p));
-      }
-      if (!branch) return;
-      const nextTrail = trail.concat([keyOf(segments)]);
-      const nextBase = inner !== undefined ? segments.concat([{ embedded: true }]) : segments;
-      const keys = Array.isArray(branch) ? branch.map((_, i) => i) : Object.keys(branch);
-      keys.forEach(k => walk(branch[k], nextBase.concat([{ key: k }]), nextTrail));
-    })(rootValue, [], []);
-
-    keep = found;
-    open = new Set([...found]);      // matches arrive already opened
+    const found = matchPaths(rootValue, query);
+    keep = found.paths;
+    hits = found.hits;
+    open = new Set([...keep]);        // matches arrive already opened
     return hits;
   }
 

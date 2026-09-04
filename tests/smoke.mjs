@@ -976,7 +976,7 @@ click(q('#jsonEmptySample'));
 await wait(200);
 ok('json view is showing', shownViews() === 'view-json', shownViews());
 ok('empty state gone', q('#jsonEmpty').hidden);
-ok('five ways to look at it', qa('#jModes button').length === 5,
+ok('six ways to look at it', qa('#jModes button').length === 6,
   qa('#jModes button').map(b => b.dataset.mode).join(','));
 ok('tree is the default', q('#jModes button[data-mode="tree"]').getAttribute('aria-pressed') === 'true');
 ok('tab badge counts the document', q('#tabJsonN').textContent === '1', q('#tabJsonN').textContent);
@@ -1117,9 +1117,33 @@ ok('columns are the union of the record keys', qa('#jTableHost thead th').length
 const heads = qa('#jTableHost .jt-sort').map(b => b.textContent);
 ok('the array it tabulated was the one inside a string',
   heads.includes('callUUID') && heads.includes('sanitizedCustomerNumber'), heads.join(','));
-ok('a picker is only offered when there is a choice', q('#jTables').hidden);
+ok('every array of records is offered', !q('#jTables').hidden && qa('#jTables option').length === 2,
+  qa('#jTables option').map(o => o.textContent.replace(/\s+/g, ' ')).join(' ;; '));
 ok('rows are numbered', q('#jTableHost .jt-n').textContent === '#');
 ok('missing fields read as missing', qa('#jTableHost .jt-empty').length > 0);
+ok('a nested object becomes columns of its own, not a "{3}" cell',
+  heads.includes('recording.bytes') && heads.includes('recording.format') &&
+  !heads.includes('recording'), heads.filter(h => /^recording/.test(h)).join(','));
+const bytesCol = qa('#jTableHost .jt-sort').findIndex(b => b.textContent === 'recording.bytes');
+ok('and its values are in them', qa('#jTableHost tbody tr')[3].children[bytesCol + 1].textContent === '168432',
+  qa('#jTableHost tbody tr')[3].children[bytesCol + 1].textContent);
+ok('an array stays one cell, listed rather than hidden',
+  /retry, billed/.test(qa('#jTableHost tbody tr')[3].textContent));
+/* The second array carries a field that is itself JSON in a string. */
+q('#jTables').value = '1';
+q('#jTables').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(150);
+const batchHeads = qa('#jTableHost .jt-sort').map(b => b.textContent);
+ok('switching arrays repaints the table', qa('#jTableHost tbody tr').length === 2,
+  qa('#jTableHost tbody tr').length + ' rows');
+ok('fields inside an escaped string become columns too',
+  batchHeads.includes('meta.attempt') && batchHeads.includes('meta.lastError'),
+  batchHeads.join(','));
+ok('with their values', /socket hang up/.test(q('#jTableHost tbody').textContent));
+ok('and so do fields inside a nested object', batchHeads.includes('counts.failed'), batchHeads.join(','));
+q('#jTables').value = '0';
+q('#jTables').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(150);
 const durationCol = qa('#jTableHost .jt-sort').findIndex(b => b.textContent === 'duration');
 click(qa('#jTableHost .jt-sort')[durationCol]);
 await wait(80);
@@ -1136,8 +1160,126 @@ await wait(240);
 click(q('#jTableHost .link-chip'));
 await wait(150);
 ok('a nested cell hands you back to the tree', !q('#jTreeHost').hidden && !!q('#jTreeHost .jrow.sel'));
-ok('and it is the cell you clicked', /recording/.test(q('#jCrumbPath').textContent),
+ok('and it is the cell you clicked', /\[3\]\.tags$/.test(q('#jCrumbPath').textContent),
   q('#jCrumbPath').textContent);
+
+section('json: graph');
+const gboxes = () => qa('#jGraphHost .jg-node');
+/* A box cuts its label to fit, so find one by the full name in its <title>. */
+const gbox = (key) => gboxes().find(g => {
+  const t = g.querySelector('title');
+  return t && t.textContent.startsWith(String(key) + ': ');
+});
+const gkey = (key) => { const b = gbox(key); return b && b.querySelector('.jg-key').textContent; };
+const gsign = (key) => { const b = gbox(key); const s2 = b && b.querySelector('.jg-sign'); return s2 && s2.textContent; };
+const viewBox = () => q('#jGraphHost svg').getAttribute('viewBox').split(' ').map(Number);
+jsonMode('graph');
+await wait(200);
+ok('graph view is showing', !q('#jGraphHost').hidden && !!q('#jGraphHost svg'));
+ok('boxes and links drawn', gboxes().length > 10 && qa('#jGraphHost .jg-link').length === gboxes().length - 1,
+  gboxes().length + ' boxes, ' + qa('#jGraphHost .jg-link').length + ' links');
+ok('it fits itself into the space with a viewBox', viewBox()[2] > 0 && viewBox()[3] > 0, viewBox().join(' '));
+ok('the root is there, drawn as $', gkey('root') === '$', String(gkey('root')));
+ok('type is carried on the box, which is what colours the dot',
+  gbox('total_call_rec_synced').dataset.type === 'number' &&
+  gbox('is_auto_dialer_enabled').dataset.type === 'boolean' &&
+  gbox('last_sync_error').dataset.type === 'null' &&
+  gbox('device').dataset.type === 'object',
+  gbox('device').dataset.type);
+ok('a document inside a string is drawn as the special case it is',
+  gbox('synced_call_details_queue').dataset.type === 'embed' &&
+  gbox('synced_call_details_queue').classList.contains('embed'));
+ok('a parent sits centred on its children', (() => {
+  const parent = gbox('device');
+  const py = Number(parent.getAttribute('transform').match(/translate\([-\d.]+ ([-\d.]+)\)/)[1]);
+  const kids = ['id', 'appVersion'].map(k => Number(gbox(k).getAttribute('transform').match(/translate\([-\d.]+ ([-\d.]+)\)/)[1]));
+  return py > Math.min(...kids) && py < Math.max(...kids) + 60;
+})());
+ok('depth decides the column', Number(gbox('device').dataset.depth) === 1 &&
+  Number(gbox('id').dataset.depth) === 2);
+ok('a name too long for the box is cut, with the whole of it in a tooltip',
+  gkey('servercall_sync_failed_count').endsWith('…') &&
+  gbox('servercall_sync_failed_count').querySelector('title').textContent === 'servercall_sync_failed_count: 1569',
+  gkey('servercall_sync_failed_count') + ' / ' + gbox('servercall_sync_failed_count').querySelector('title').textContent);
+
+section('json: graph — opening and closing');
+ok('the top level and one below it arrive open', gsign('device') === '−' && !!gbox('battery'),
+  String(gsign('device')));
+ok('deeper branches wait, showing a plus', gsign('battery') === '+' && !gbox('temperatureC'),
+  String(gsign('battery')));
+const boxesBefore = gboxes().length;
+click(gbox('battery'));
+await wait(120);
+ok('clicking one opens it', gboxes().length > boxesBefore && !!gbox('temperatureC'),
+  boxesBefore + ' → ' + gboxes().length + ' boxes');
+ok('and the sign flips', gsign('battery') === '−', String(gsign('battery')));
+ok('clicking also selects, so the path is shown', q('#jCrumbPath').textContent === 'device.battery',
+  q('#jCrumbPath').textContent);
+click(gbox('battery'));
+await wait(120);
+ok('clicking again closes it', !gbox('temperatureC'));
+click(q('#jCollapse'));
+await wait(120);
+ok('collapse leaves just the root', gboxes().length === 1, gboxes().length + ' boxes');
+click(q('#jExpand'));
+await wait(200);
+ok('expand draws the whole shape', gboxes().length > 60, gboxes().length + ' boxes');
+ok('the status line counts the boxes', /box/.test(q('#jStats').textContent), q('#jStats').textContent);
+const enterKey = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+gbox('device').dispatchEvent(enterKey);
+await wait(120);
+ok('Enter on a box works like a click', !gbox('osVersion'), gboxes().length + ' boxes');
+
+section('json: graph — zoom, fit and find');
+click(q('#jFit'));
+await wait(100);
+const fitted = viewBox();
+ok('fit frames everything at 100%', q('#jZoom').textContent === '100%', q('#jZoom').textContent);
+click(q('#jZoomIn'));
+await wait(100);
+ok('zooming in narrows the viewBox', viewBox()[2] < fitted[2] && q('#jZoom').textContent === '125%',
+  q('#jZoom').textContent + ' ' + viewBox()[2].toFixed(0) + ' vs ' + fitted[2].toFixed(0));
+click(q('#jZoomOut'));
+await wait(100);
+ok('and zooming out widens it again', Math.abs(viewBox()[2] - fitted[2]) < 1, viewBox()[2].toFixed(0));
+q('#jSearch').value = 'ANSWERED';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(280);
+ok('find counts the same matches as the tree', /2 matches/.test(q('#jHits').textContent), q('#jHits').textContent);
+ok('and the map is cut down to them', gboxes().length < 12 && !gbox('device'), gboxes().length + ' boxes');
+q('#jSearch').value = '';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(280);
+ok('clearing it brings the map back', gboxes().length > 12, gboxes().length + ' boxes');
+
+section('json: graph — a wide array');
+await pasteJson('Wide', JSON.stringify(Array.from({ length: 40 }, (_, i) => ({ n: i }))));
+jsonMode('graph');
+await wait(250);
+click(q('#jExpand'));
+await wait(200);
+ok('a branch too wide to draw offers the rest', !!q('#jGraphHost .jg-node.more'),
+  q('#jGraphHost .jg-more-text') ? q('#jGraphHost .jg-more-text').textContent : 'no more-node');
+const wideBefore = gboxes().length;
+click(q('#jGraphHost .jg-node.more'));
+await wait(200);
+ok('and draws them when asked', gboxes().length > wideBefore,
+  wideBefore + ' → ' + gboxes().length + ' boxes');
+
+section('json: graph — back to the tree');
+const gTarget = gbox(0) || gboxes()[1];
+gTarget.dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true }));
+await wait(200);
+ok('double-clicking a box hands you to the tree at that value',
+  !q('#jTreeHost').hidden && !!q('#jTreeHost .jrow.sel'),
+  q('#jCrumbPath').textContent);
+
+/* Back to the sample for the views that follow. */
+click(q('#tab-home'));
+await wait(80);
+click(qa('#jsonRows .row-item').find(li => /sample/.test(li.textContent)).querySelector('.row-main'));
+await wait(200);
+ok('a document reopens from the library', /sample\.json$/.test(q('#jName').value), q('#jName').value);
 
 section('json: code');
 jsonMode('code');
@@ -1262,7 +1404,7 @@ jsonMode('tree');
 await wait(100);
 const pressJson = (key, opts) => d.dispatchEvent(new window.KeyboardEvent('keydown',
   Object.assign({ key, bubbles: true }, opts || {})));
-pressJson('3');
+pressJson('4');
 await wait(100);
 ok('a number picks a view', q('#jModes button[data-mode="code"]').getAttribute('aria-pressed') === 'true');
 pressJson(']');
@@ -1284,14 +1426,14 @@ await wait(100);
 
 section('json: a second document');
 await pasteJson('Deploys', '[{"env":"prod","ok":true},{"env":"staging","ok":false}]');
-ok('two documents in the library', jsonDocsNow().length === 2, jsonDocsNow().length + ' documents');
+ok('the pasted document joins the library', jsonDocsNow().length === 3, jsonDocsNow().length + ' documents');
 ok('the pasted one is on screen', q('#jName').value === 'Deploys', q('#jName').value);
 ok('an array root tabulates straight away',
   (jsonMode('table'), await wait(150), qa('#jTableHost tbody tr').length) === 2,
   qa('#jTableHost tbody tr').length + ' rows');
 
 await pasteJson('Broken', '{"nope"');
-ok('an invalid paste is still kept', jsonDocsNow().length === 3);
+ok('an invalid paste is still kept', jsonDocsNow().length === 4, jsonDocsNow().length + ' documents');
 ok('and opens in the source pane', q('#jModes button[data-mode="edit"]').getAttribute('aria-pressed') === 'true');
 ok('with the reason', /Invalid JSON/.test(q('#jError').textContent), q('#jError').textContent.slice(0, 60));
 jsonMode('tree');
@@ -1345,10 +1487,10 @@ globalThis.fetch = previousFetch;
 section('json: home and persistence');
 click(q('#tab-home'));
 await wait(120);
-ok('the JSON section lists them', qa('#jsonRows .row-item').length === 4,
+ok('the JSON section lists them', qa('#jsonRows .row-item').length === 5,
   qa('#jsonRows .row-item').length + ' rows');
 ok('an invalid document is labelled', /invalid/.test(q('#jsonRows').textContent));
-ok('the tab badge follows', q('#tabJsonN').textContent === '4', q('#tabJsonN').textContent);
+ok('the tab badge follows', q('#tabJsonN').textContent === '5', q('#tabJsonN').textContent);
 saved.files.length = 0;
 click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn'));
 await wait(120);
@@ -1363,11 +1505,11 @@ const storedJson = await new Promise((res, rej) => {
   };
   req.onerror = () => rej(req.error);
 });
-ok('documents are in IndexedDB', storedJson.length === 4 && storedJson.every(r => typeof r.text === 'string'),
+ok('documents are in IndexedDB', storedJson.length === 5 && storedJson.every(r => typeof r.text === 'string'),
   storedJson.length + ' records');
 click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn.danger'));
 await wait(150);
-ok('and can be removed', qa('#jsonRows .row-item').length === 3,
+ok('and can be removed', qa('#jsonRows .row-item').length === 4,
   qa('#jsonRows .row-item').length + ' rows');
 
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');

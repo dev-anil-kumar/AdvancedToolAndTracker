@@ -172,7 +172,11 @@
 .jt th,.jt td{
   border-bottom:1px solid var(--line);border-right:1px solid var(--line);
   padding:5px 9px;text-align:left;vertical-align:top;
-  max-width:340px;overflow:hidden;
+  max-width:320px;
+}
+/* Clipping has to be visible, or a cell lies about what it holds. */
+.jt td .jlit{
+  display:block;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .jt thead th{
   position:sticky;top:0;z-index:2;background:var(--bg-tint);
@@ -181,8 +185,10 @@
 .jt-sort{
   appearance:none;border:0;background:none;padding:0;cursor:pointer;
   font:inherit;font-size:11.5px;font-weight:600;color:var(--ink-2);
-  font-family:ui-monospace,Menlo,monospace;
+  font-family:ui-monospace,Menlo,monospace;max-width:300px;
 }
+.jt-path{font-weight:400;color:var(--j-gutter)}
+.jt-leaf{color:inherit}
 .jt-sort:hover{color:var(--ink)}
 .jt-sort.up::after{content:" ↑";color:var(--accent)}
 .jt-sort.down::after{content:" ↓";color:var(--accent)}
@@ -193,12 +199,65 @@
 .jt thead .jt-n{z-index:3;background:var(--bg-tint)}
 .jt tbody tr:hover td{background:var(--bg-tint)}
 .jt tbody tr:hover .jt-n{background:var(--bg-tint)}
-.jt td .jlit{font-family:ui-monospace,Menlo,monospace;display:block;max-height:4.2em;overflow:hidden}
+.jt td .jlit{font-family:ui-monospace,Menlo,monospace}
 .jt td .jlit.string::before,.jt td .jlit.string::after{content:none}
+.jt-list{margin-left:6px;color:var(--ink-3);font-size:11.5px}
 .jt-empty{color:var(--j-gutter)}
 .link-chip{cursor:pointer;font-family:ui-monospace,Menlo,monospace}
 .link-chip:hover{background:color-mix(in srgb,var(--j-embed) 18%, transparent)}
-.jt-more{flex:none;margin:8px clamp(8px,2vw,16px) 16px;align-self:flex-start}
+.jt-foot{
+  flex:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin:8px clamp(8px,2vw,16px) 16px;
+}
+
+/* ---------- Graph ---------- */
+/* A faint dot grid, so panning and zooming have something to read against. */
+.jgraph-host{
+  padding:0;overflow:hidden;cursor:grab;
+  background-color:var(--bg);
+  background-image:radial-gradient(var(--j-rule) 1px, transparent 1px);
+  background-size:22px 22px;
+  touch-action:none;
+}
+.jgraph-host.panning{cursor:grabbing}
+.jg{display:block;width:100%;height:100%}
+.jg-link{fill:none;stroke:var(--line-strong);stroke-width:1.4}
+.jg-node{cursor:pointer}
+.jg-node:focus{outline:none}
+.jg-box{
+  fill:var(--surface);stroke:var(--line-strong);stroke-width:1.2;
+  transition:stroke .12s ease;
+}
+.jg-node:hover .jg-box{stroke:var(--ink-3)}
+.jg-node:focus-visible .jg-box,.jg-node.sel .jg-box{stroke:var(--accent);stroke-width:2}
+.jg-node.sel .jg-box{fill:var(--accent-soft)}
+.jg-key,.jg-val,.jg-sign,.jg-more-text{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;
+}
+.jg-key{fill:var(--ink);font-weight:500}
+.jg-val{fill:var(--ink-3)}
+.jg-twist{fill:var(--bg-tint);stroke:var(--line-strong);stroke-width:1}
+.jg-sign{fill:var(--ink-2);font-size:12px}
+.jg-node:hover .jg-twist{fill:var(--accent-soft);stroke:var(--accent)}
+
+/* The dot carries the type, which is what makes the map readable at a glance. */
+.jg-dot{fill:var(--j-null)}
+.jg-node[data-type="object"] .jg-dot{fill:var(--j-key)}
+.jg-node[data-type="array"] .jg-dot{fill:var(--j-bool)}
+.jg-node[data-type="string"] .jg-dot{fill:var(--j-str)}
+.jg-node[data-type="number"] .jg-dot{fill:var(--j-num)}
+.jg-node[data-type="boolean"] .jg-dot{fill:var(--j-bool)}
+.jg-node[data-type="embed"] .jg-dot{fill:var(--j-embed)}
+.jg-node[data-type="object"] .jg-val,.jg-node[data-type="array"] .jg-val{fill:var(--j-brace)}
+.jg-node[data-type="string"] .jg-val{fill:var(--j-str)}
+.jg-node[data-type="number"] .jg-val{fill:var(--j-num)}
+.jg-node[data-type="boolean"] .jg-val{fill:var(--j-bool)}
+/* A document that arrived inside a string is drawn as the special case it is. */
+.jg-node.embed .jg-box{stroke:color-mix(in srgb,var(--j-embed) 55%, var(--line-strong));stroke-dasharray:4 2.5}
+.jg-node.embed .jg-val{fill:var(--j-embed)}
+
+.jg-node.more .jg-box{fill:var(--bg-tint);stroke-dasharray:3 3}
+.jg-more-text{fill:var(--accent-ink)}
 
 /* ---------- Code ---------- */
 .jcode-host{display:flex;align-items:flex-start;background:var(--surface)}
@@ -252,4 +311,6 @@
   .jname{width:120px}
   .jfind{width:130px}
   .jt th,.jt td{max-width:200px}
+  .jt td .jlit{max-width:180px}
+  .jgraph-host{background-size:18px 18px}
 }

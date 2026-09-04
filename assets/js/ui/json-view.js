@@ -17,7 +17,9 @@
  * A view: it reads state, renders, and asks features/jsondocs.js to change it.
  */
 import { on, EVENTS } from '../core/bus.js';
-import { JSON_MODES, JSON_OPEN_DEPTH, JSON_SAVE_MS, JSON_INDENT } from '../core/config.js';
+import {
+  GRAPH_OPEN_DEPTH, JSON_INDENT, JSON_MODES, JSON_OPEN_DEPTH, JSON_SAVE_MS
+} from '../core/config.js';
 import { $, $$, el } from '../core/dom.js';
 import { formatBytes, formatWhen, plural } from '../core/format.js';
 import { jsonDocById, jsondocs, jsonDocsByRecency } from '../core/state.js';
@@ -31,6 +33,7 @@ import { renderCode } from '../features/json/code.js';
 import {
   minify, parse, pretty, sortKeys, stats, tables, typeOf, unwrap
 } from '../features/json/model.js';
+import { createGraph } from '../features/json/graph.js';
 import { createTable } from '../features/json/table.js';
 import { createTree } from '../features/json/tree.js';
 
@@ -51,6 +54,7 @@ let painted = {};          // which surfaces are up to date
 
 let tree = null;
 let table = null;
+let graph = null;
 
 /* ---------- Opening ---------- */
 
@@ -119,14 +123,20 @@ function build() {
     onCopy: (copied) => toast('Copied ' + plural(copied.length, 'character', 'characters') + '.')
   });
 
+  graph = createGraph({
+    host: $('#jGraphHost'),
+    onSelect: (hit) => { showCrumb(hit); syncToolbar(); },
+    onReveal: (segments) => { setMode('tree'); tree.reveal(segments); }
+  });
+
   table = createTable({
     host: $('#jTableHost'),
-    onOpen: (row, col) => {
+    onOpen: (row, label, segments) => {
       const chosen = picks[pickedTable];
       if (!chosen) return;
-      const segments = chosen.segments.concat(col === '' ? [{ key: row }] : [{ key: row }, { key: col }]);
+      /* The cell knows its own path inside the record; prefix the record. */
       setMode('tree');
-      tree.reveal(segments);
+      tree.reveal(chosen.segments.concat([{ key: row }], segments || []));
     }
   });
 }
@@ -157,13 +167,15 @@ export function setMode(next) {
 function render() {
   const open = docId !== null;
   $('#jsonEmpty').hidden = open;
-  ['jTreeHost', 'jTableHost', 'jCodeHost', 'jRawHost', 'jEditHost'].forEach(id => { $('#' + id).hidden = true; });
+  ['jTreeHost', 'jTableHost', 'jGraphHost', 'jCodeHost', 'jRawHost', 'jEditHost']
+    .forEach(id => { $('#' + id).hidden = true; });
   syncToolbar();
   if (!open) { $('#jCrumb').hidden = true; $('#jError').hidden = true; return; }
 
   showProblem();
   if (mode === 'tree') paintTree();
   if (mode === 'table') paintTable();
+  if (mode === 'graph') paintGraph();
   if (mode === 'code') paintCode();
   if (mode === 'raw') paintRaw();
   if (mode === 'edit') paintEdit();
@@ -204,6 +216,23 @@ function paintTable() {
     table.setRows(chosen.value);
     table.setFilter(query());
     painted.table = true;
+    syncToolbar();
+  }
+}
+
+function paintGraph() {
+  const host = $('#jGraphHost');
+  host.hidden = false;
+  if (value === null) {
+    host.innerHTML = '';
+    host.appendChild(el('p', 'empty-line', 'Nothing to map until the syntax parses — the edit pane says where it breaks.'));
+    painted.graph = false;
+    return;
+  }
+  if (!painted.graph) {
+    graph.setRoot(value, GRAPH_OPEN_DEPTH);
+    if (query()) graph.search(query());
+    painted.graph = true;
     syncToolbar();
   }
 }
@@ -369,15 +398,18 @@ function syncToolbar() {
   $('#jName').disabled = !open;
 
   const showIf = (id, cond) => { $('#' + id).hidden = !cond; };
-  showIf('jExpand', open && mode === 'tree');
-  showIf('jCollapse', open && mode === 'tree');
+  const outline = mode === 'tree' || mode === 'graph';
+  showIf('jExpand', open && outline);
+  showIf('jCollapse', open && outline);
   showIf('jEditable', open && mode === 'tree');
+  ['jZoomOut', 'jZoom', 'jZoomIn', 'jFit'].forEach(id => showIf(id, open && mode === 'graph'));
   showIf('jUnwrap', open && mode === 'code');
   showIf('jFormat', open && mode === 'edit');
   showIf('jMinify', open && mode === 'edit');
   showIf('jSortKeys', open && mode === 'edit');
   showIf('jTables', open && mode === 'table' && picks.length > 1);
   showIf('jSearch', open && mode !== 'raw');
+  if (open && mode === 'graph') $('#jZoom').textContent = Math.round(graph.zoomLevel() * 100) + '%';
   showIf('jHits', open && mode !== 'raw');
   showIf('jCopy', open);
   showIf('jExport', open);
@@ -403,6 +435,10 @@ function statusLine() {
     bits.push(plural(painted.codeInfo.lines, 'line', 'lines'));
     if (!painted.codeInfo.coloured) bits.push('too big to colour');
   }
+  if (mode === 'graph' && painted.graph) {
+    const drawn = graph.info();
+    bits.push(plural(drawn.nodes, 'box', 'boxes') + (drawn.partial ? ' drawn' : ''));
+  }
   if (info.embeds) bits.push(plural(info.embeds, 'nested document', 'nested documents'));
   return bits.join(' · ');
 }
@@ -412,7 +448,8 @@ function hitLine() {
   if (!q || docId === null) return '';
   if (mode === 'table') return plural(table.shownCount(), 'row', 'rows');
   if (mode === 'code') return painted.codeInfo ? plural(painted.codeInfo.marks, 'match', 'matches') : '';
-  if (mode === 'tree') return tree.searchHits() ? plural(tree.searchHits(), 'match', 'matches') : 'no matches';
+  const outline = mode === 'tree' ? tree : mode === 'graph' ? graph : null;
+  if (outline) return outline.searchHits() ? plural(outline.searchHits(), 'match', 'matches') : 'no matches';
   return '';
 }
 
@@ -508,6 +545,7 @@ function closeCurrent() {
   info = null;
   invalidate();
   if (tree) tree.setRoot(null);
+  if (graph) graph.setRoot(null);
   if (table) table.clear();
   render();
 }
@@ -534,6 +572,7 @@ $('#jSearch').addEventListener('input', () => {
   findTimer = setTimeout(() => {
     if (docId === null) return;
     if (mode === 'tree' && value !== null) tree.search(query());
+    if (mode === 'graph' && value !== null) graph.search(query());
     if (mode === 'table') table.setFilter(query());
     if (mode === 'code') { painted.code = false; paintCode(); }
     syncToolbar();
@@ -545,10 +584,22 @@ $('#jSearch').addEventListener('keydown', e => {
 
 $('#jExpand').addEventListener('click', () => {
   if (value === null) return;
-  const whole = tree.expandAll();
-  if (!whole) toast('Opened as much as is comfortable — use Find to reach the rest.');
+  const whole = mode === 'graph' ? graph.expandAll() : tree.expandAll();
+  syncToolbar();
+  if (!whole) {
+    toast(mode === 'graph'
+      ? 'Drawn as much as fits on one map — open a branch for the rest.'
+      : 'Opened as much as is comfortable — use Find to reach the rest.');
+  }
 });
-$('#jCollapse').addEventListener('click', () => tree.collapseAll());
+$('#jCollapse').addEventListener('click', () => {
+  if (mode === 'graph') graph.collapseAll();
+  else tree.collapseAll();
+  syncToolbar();
+});
+$('#jZoomIn').addEventListener('click', () => { graph.zoomBy(1.25); syncToolbar(); });
+$('#jZoomOut').addEventListener('click', () => { graph.zoomBy(1 / 1.25); syncToolbar(); });
+$('#jFit').addEventListener('click', () => { graph.fit(); syncToolbar(); });
 
 $('#jEditable').addEventListener('click', () => {
   const btn = $('#jEditable');

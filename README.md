@@ -40,7 +40,7 @@ Optional, and only needed for development:
 
 ```bash
 npm install
-npm test      # integration smoke test: 308 assertions through the real module graph
+npm test      # integration smoke test: 344 assertions through the real module graph
 npm run lint  # ESLint; no-undef is what catches a missing import with no bundler
 ```
 
@@ -72,7 +72,7 @@ assets/
                             pane-resize · notes · exporter · focus · drawings ·
                             jsondocs
     features/canvas/        model · editor
-    features/json/          model · tree · table · code
+    features/json/          model · tree · table · graph · code
     ui/                     shell · home · notes-view · dialogs · canvas-view ·
                             json-view
 ```
@@ -195,15 +195,27 @@ distinction a reader of unfamiliar data needs.
   - Autosaves; exports `.json` (lossless, re-importable), `.svg` or `.png`; imports by
     button or by dropping a file on the canvas.
 - **JSON** — open a `.json` file, paste it, or fetch a URL; it lands in the library like
-  any other document. Five ways to look at the same data, switched with the segmented
-  control or <kbd>1</kbd>–<kbd>5</kbd>:
+  any other document. Six ways to look at the same data, switched with the segmented
+  control, <kbd>1</kbd>–<kbd>6</kbd>, or <kbd>[</kbd> and <kbd>]</kbd>:
   - **Tree** — collapsible and coloured by type, with a summary beside every closed
     branch. Children are built when a branch opens and long arrays arrive 200 at a time,
     so a three-megabyte dump opens instantly. Real `tree`/`treeitem` roles and arrow-key
     navigation; click a row for its path in JavaScript accessor notation.
-  - **Table** — any array of objects as rows and columns, sortable per column, filtered
-    by the same Find box. Every array of objects in the document is offered by path,
-    embedded ones included. Click a nested cell and the tree opens at exactly that value.
+  - **Table** — any array of records as rows and columns, sortable per column, filtered
+    by the same Find box. Every array of records in the document is offered by path,
+    embedded ones included.
+    A column is a *leaf*, not a top-level key: `recording: {bytes, format}` becomes
+    `recording.bytes` and `recording.format`, and a field that is itself JSON in a string
+    is opened out the same way — a cell reading `{3}` answers nothing. Arrays stay one
+    cell, listed inline, with a chip that takes you to them in the tree.
+  - **Graph** — the document as a map: a tidy left-to-right layout, one box per value,
+    coloured by type, with the branches you have opened drawn and the rest offered. This
+    is the view for a payload you have never seen before — how wide, how deep, where the
+    weight sits, and which fields are really documents smuggled through a string (drawn
+    with a dashed border). Click a box to open or close it, drag to pan, wheel to zoom,
+    *Fit* to frame the lot, double-click to jump to that value in the tree. A branch too
+    wide to draw shows its first fourteen children and a `+ N more` box; the whole map is
+    capped, because a map of a thousand boxes is not a map.
   - **Code** — the whole thing formatted, coloured and numbered, keys distinguished from
     string values. *Unwrap* replaces every JSON-inside-a-string with the document it
     holds, which is usually the difference between unreadable and obvious.
@@ -216,6 +228,9 @@ distinction a reader of unfamiliar data needs.
     times it is nested. Editing a value inside one is written back out through the
     string. One that was truncated in transit is labelled rather than shown as a wall of
     escapes.
+  - **Find** — one box, and each view answers it in its own way: the tree and the graph
+    filter down to the matches and their ancestors, the table filters rows, the code view
+    marks them. What counts as a match is decided in one place, so the views agree.
   - **Editing without spoiling the reading** — the tree grows no controls at all until
     *Edit values* is switched on. Then a click edits a value, a double-click renames a
     key, and `+`/`×` add and remove entries; what you type is read as JSON if it parses
