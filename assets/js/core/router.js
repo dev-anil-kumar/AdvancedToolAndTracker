@@ -9,9 +9,10 @@ export const VIEWS = {
   home:  { tab: 'tab-home',  view: 'view-home' },
   read:  { tab: 'tab-read',  view: 'view-read' },
   notes: { tab: 'tab-notes', view: 'view-notes' },
-  canvas: { tab: 'tab-canvas', view: 'view-canvas' }
+  canvas: { tab: 'tab-canvas', view: 'view-canvas' },
+  json: { tab: 'tab-json', view: 'view-json' }
 };
-export const tabOrder = ['home', 'read', 'notes', 'canvas'];
+export const tabOrder = ['home', 'read', 'notes', 'canvas', 'json'];
 let current = 'home';
 
 export function route(name, opts) {

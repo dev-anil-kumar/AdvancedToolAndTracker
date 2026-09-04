@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Folio — Markdown Reader</title>
-<meta name="description" content="A quiet Markdown reader. Open local files or public URLs, read several side by side, and keep notes from anything you select.">
+<title>Folio — Markdown &amp; JSON Reader</title>
+<meta name="description" content="A quiet reader for Markdown and JSON. Open local files or public URLs, read several side by side, keep notes from anything you select, and pick apart a JSON dump — nested escaped JSON included.">
 <meta name="color-scheme" content="light dark">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,6 +20,7 @@
 <link rel="stylesheet" href="./assets/css/workspace.css">
 <link rel="stylesheet" href="./assets/css/views.css">
 <link rel="stylesheet" href="./assets/css/canvas.css">
+<link rel="stylesheet" href="./assets/css/json.css">
 <link rel="stylesheet" href="./assets/css/responsive.css">
 
 </head>
@@ -33,6 +34,7 @@
     <button role="tab" id="tab-read" aria-selected="false" aria-controls="view-read" tabindex="-1">Reading <span class="n" id="tabReadN"></span></button>
     <button role="tab" id="tab-notes" aria-selected="false" aria-controls="view-notes" tabindex="-1">Notes <span class="n" id="tabNotesN"></span></button>
     <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="view-canvas" tabindex="-1">Canvas <span class="n" id="tabCanvasN"></span></button>
+    <button role="tab" id="tab-json" aria-selected="false" aria-controls="view-json" tabindex="-1">JSON <span class="n" id="tabJsonN"></span></button>
   </div>
 
   <div class="spacer"></div>
@@ -47,7 +49,7 @@
   <section class="view" role="tabpanel" id="view-home" aria-labelledby="tab-home" tabindex="0">
     <div class="home">
       <h1>Folio</h1>
-      <p class="lede">A quiet Markdown reader. Open files from your disk or a public link, read several side by side, and keep a note from anything you select.</p>
+      <p class="lede">A quiet reader for Markdown and JSON. Open files from your disk or a public link, read several side by side, and keep a note from anything you select. Drop a <code>.json</code> file in and read it as a tree, a table or coloured source.</p>
 
       <div class="quick">
         <button class="btn primary" id="qOpen" type="button">
@@ -65,6 +67,10 @@
         <button class="btn" id="canvasNew" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M8 12h8M12 8.5v7"/></svg>
           New drawing
+        </button>
+        <button class="btn" id="qJson" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5C7 4.5 7.5 9.2 5 12c2.5 2.8 2 7.5 4.5 7.5"/><path d="M14.5 4.5c2.5 0 2 4.7 4.5 7.5-2.5 2.8-2 7.5-4.5 7.5"/></svg>
+          Open JSON
         </button>
         <button class="btn ghost" id="qSample" type="button">Sample document</button>
       </div>
@@ -85,6 +91,15 @@
           <button class="link" id="importDrawing" type="button">Import a drawing</button>
         </div>
         <ul class="rows" id="drawingRows"></ul>
+      </section>
+
+      <section class="sec" id="secJson" hidden>
+        <div class="sec-head">
+          <span class="sec-title">JSON</span>
+          <span class="sec-count" id="jsonCount"></span>
+          <button class="link" id="pasteJsonLink" type="button">Paste JSON</button>
+        </div>
+        <ul class="rows" id="jsonRows"></ul>
       </section>
 
       <section class="sec" id="secNotes" hidden>
@@ -137,7 +152,10 @@
           Drop a <code>.md</code> file anywhere on the window, or paste a link to a raw Markdown file
           (a <code>raw.githubusercontent.com</code> URL, a Gist, or any server that allows cross-origin reads).
           In the reading view, select text and choose <em>Save as note</em> to bookmark a passage —
-          notes remember where they came from and jump you straight back.
+          notes remember where they came from and jump you straight back. A <code>.json</code> file
+          opens in the JSON view instead: a collapsible tree, a table of any array of records,
+          coloured source, and an edit pane that tells you which line broke. JSON that arrived
+          inside a string is recognised and opens like the document it is.
         </p>
       </section>
     </div>
@@ -254,10 +272,93 @@
       </div>
     </div>
   </section>
+
+  <!-- ================= JSON ================= -->
+  <section class="view" role="tabpanel" id="view-json" aria-labelledby="tab-json" tabindex="0" hidden>
+    <div class="jtoolbar">
+      <div class="seg jmodes" id="jModes" role="group" aria-label="How to look at this document"></div>
+
+      <label class="sr" for="jName">Document title</label>
+      <input class="jname" id="jName" type="text" autocomplete="off" spellcheck="false" placeholder="Untitled JSON">
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <input class="jfind" id="jSearch" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Find a key or value…" aria-label="Find a key or value in this document">
+      <span class="jmeta" id="jHits"></span>
+
+      <button class="btn tiny ghost" id="jExpand" type="button" title="Open every branch">Expand</button>
+      <button class="btn tiny ghost" id="jCollapse" type="button" title="Close every branch">Collapse</button>
+      <button class="btn tiny ghost" id="jUnwrap" type="button" aria-pressed="false"
+              title="Replace each JSON-inside-a-string with the document it holds">Unwrap</button>
+      <button class="btn tiny ghost" id="jEditable" type="button" aria-pressed="false"
+              title="Click any value in the tree to change it">Edit values</button>
+
+      <label class="sr" for="jTables">Array to tabulate</label>
+      <select class="jpick" id="jTables" hidden></select>
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="jFormat" type="button" title="Re-indent the text">Format</button>
+      <button class="btn tiny ghost" id="jMinify" type="button" title="Strip every space and newline">Minify</button>
+      <button class="btn tiny ghost" id="jSortKeys" type="button" title="Sort every object's keys">Sort keys</button>
+
+      <div class="spacer"></div>
+
+      <span class="jmeta" id="jStats"></span>
+      <span class="jmeta saved" id="jSaved"></span>
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="jCopy" type="button" title="Copy the whole document">Copy</button>
+      <button class="btn tiny ghost" id="jExport" type="button" title="Save as a .json file">Save</button>
+      <button class="btn tiny ghost" id="jOpen" type="button">Open</button>
+      <button class="btn tiny ghost" id="jPaste" type="button">Paste</button>
+      <button class="btn tiny ghost" id="jUrl" type="button">URL</button>
+      <button class="btn tiny ghost danger" id="jRemove" type="button" title="Remove from the library">Remove</button>
+    </div>
+
+    <div class="jcrumb" id="jCrumb" hidden>
+      <span class="jcrumb-path" id="jCrumbPath"></span>
+      <span class="jcrumb-type" id="jCrumbType"></span>
+      <button class="btn tiny ghost" id="jCrumbCopy" type="button">Copy path</button>
+    </div>
+
+    <div class="jbanner" id="jError" hidden role="alert"></div>
+
+    <div class="jstage" id="jStage">
+      <div class="jhost" id="jTreeHost" role="tree" aria-label="JSON tree" hidden></div>
+      <div class="jhost jtable-host" id="jTableHost" hidden></div>
+      <div class="jhost jcode-host" id="jCodeHost" hidden></div>
+      <div class="jhost" id="jRawHost" hidden><pre class="jraw" id="jRaw"></pre></div>
+      <div class="jhost jedit-host" id="jEditHost" hidden>
+        <textarea id="jEditArea" spellcheck="false" autocomplete="off" aria-label="JSON source"></textarea>
+      </div>
+
+      <div class="json-empty" id="jsonEmpty">
+        <div class="box">
+          <h2>Nothing open</h2>
+          <p>Open a <code>.json</code> file, paste JSON, or drop a file anywhere on the window.
+             Everything you open is kept in this browser, like any other document.</p>
+          <p>Five ways to look at the same data: a collapsible <strong>tree</strong>, any array of objects
+             as a <strong>table</strong>, the formatted and coloured <strong>code</strong>, the
+             <strong>raw</strong> text exactly as it arrived, and an <strong>edit</strong> pane that tells
+             you where the syntax broke. JSON hidden inside a string is recognised and opens like the
+             document it is.</p>
+          <div class="empty-acts">
+            <button class="btn primary" id="jsonEmptyOpen" type="button">Open file</button>
+            <button class="btn" id="jsonEmptyPaste" type="button">Paste JSON</button>
+            <button class="btn ghost" id="jsonEmptySample" type="button">Sample document</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" class="sr" multiple>
 <input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
+<input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.txt,application/json,text/plain" class="sr" multiple>
 
 <div class="selpop" id="selpop" hidden role="group" aria-label="Selection actions">
   <button class="btn tiny primary" id="selNote" type="button">Save as note</button>
@@ -317,6 +418,86 @@
     </div>
   </form>
 </dialog>
+
+
+<dialog id="jsonDlg" aria-labelledby="jsonDlgTitle">
+  <div class="dlg-head">
+    <h2 id="jsonDlgTitle">Paste JSON</h2>
+    <p>Kept in your library like any other document. It does not have to be valid — the edit
+       pane will show you where it breaks.</p>
+  </div>
+  <form class="dlg-body" id="jsonForm">
+    <label class="field-label" for="jsonTitle">Title <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+    <input class="input" id="jsonTitle" type="text" autocomplete="off" placeholder="Taken from the data if left blank">
+    <label class="field-label" for="jsonText">JSON</label>
+    <textarea class="input" id="jsonText" spellcheck="false" placeholder='{ "hello": "world" }' required></textarea>
+    <div class="dlg-err" id="jsonErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Open</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="jsonUrlDlg" aria-labelledby="jsonUrlTitle">
+  <div class="dlg-head">
+    <h2 id="jsonUrlTitle">Open JSON from a URL</h2>
+    <p>A direct link to a JSON file. Folio downloads it into this browser.</p>
+  </div>
+  <form class="dlg-body" id="jsonUrlForm">
+    <label class="field-label" for="jsonUrlField">File URL</label>
+    <input class="input" id="jsonUrlField" type="url" inputmode="url" spellcheck="false" autocomplete="off"
+           placeholder="https://raw.githubusercontent.com/user/repo/main/data.json" required>
+    <p class="dlg-note">The server must allow cross-origin reads (<code>Access-Control-Allow-Origin</code>).</p>
+    <div class="dlg-err" id="jsonUrlErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" id="jsonUrlSubmit" type="submit">Download &amp; open</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Sample JSON: real-world shaped, including JSON stuffed inside a string
+     (once, and twice over) and one field that was truncated in transit. -->
+<script id="sample-json" type="application/json">
+{
+  "device": {
+    "id": "vy-8841-x",
+    "model": "Pixel 7a",
+    "osVersion": 34,
+    "appVersion": "18.2.1",
+    "battery": {
+      "level": 0.62,
+      "charging": false,
+      "temperatureC": 31.4
+    },
+    "permissions": [
+      "CALL_LOG",
+      "RECORD_AUDIO",
+      "READ_PHONE_STATE"
+    ]
+  },
+  "is_auto_dialer_enabled": true,
+  "total_call_rec_synced": 8802,
+  "servercall_sync_failed_count": 1569,
+  "servercall_sync_success_count": 8934,
+  "last_sync_error": null,
+  "notes": "Two lines here,\nso the tree has something multi-line to show.",
+  "synced_call_details_queue": "[{\"callStartTime\": \"Sep 2, 2026 12:17:00\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"88cf5adc-957e-4b85-83bc-013966dce3f6\", \"creationTimeMillis\": 1788331619848, \"duration\": 0, \"lastCallID\": \"9418\", \"leadIdentifier\": \"ipt::398895\", \"sanitizedCustomerNumber\": \"+917200050573\"}, {\"billedDuration\": 0, \"callEndTime\": \"Sep 2, 2026 12:18:09\", \"callStartTime\": \"Sep 2, 2026 12:18:08\", \"callState\": \"ANSWERED\", \"callStatus\": \"missed\", \"callType\": \"outbound\", \"callUUID\": \"1d24bcf4-c37b-4984-9b74-6ccc0109ccdb\", \"creationTimeMillis\": 1788331688105, \"duration\": 1, \"eventType\": \"end_call\", \"lastCallID\": \"9419\", \"leadIdentifier\": \"ipt::397300\", \"sanitizedCustomerNumber\": \"+918778768487\"}, {\"billedDuration\": 0, \"callStartTime\": \"Sep 2, 2026 12:18:24\", \"callState\": \"STARTED\", \"callType\": \"outbound\", \"callUUID\": \"ca75d215-f0b7-48a0-8684-26af99691d91\", \"creationTimeMillis\": 1788331703956, \"duration\": 0, \"eventType\": \"start_call\", \"lastCallID\": \"9420\", \"leadIdentifier\": \"ipt::398982\", \"sanitizedCustomerNumber\": \"+919486634357\"}, {\"billedDuration\": 42, \"callEndTime\": \"Sep 2, 2026 12:20:11\", \"callStartTime\": \"Sep 2, 2026 12:19:29\", \"callState\": \"ANSWERED\", \"callStatus\": \"completed\", \"callType\": \"outbound\", \"callUUID\": \"7b1e0a64-2c58-4d2a-9f0b-5c9d3a17e442\", \"creationTimeMillis\": 1788331769004, \"duration\": 42, \"eventType\": \"end_call\", \"lastCallID\": \"9421\", \"leadIdentifier\": \"ipt::399104\", \"recording\": {\"bytes\": 168432, \"format\": \"mp3\", \"synced\": true}, \"sanitizedCustomerNumber\": \"+919845123300\"}]",
+  "retry_envelope": "{\"queuedAt\": 1788331770000, \"payload\": \"{\\\"attempt\\\": 3, \\\"backoff\\\": [\\\"2s\\\", \\\"8s\\\", \\\"32s\\\"], \\\"lastError\\\": \\\"socket hang up\\\"}\"}",
+  "truncated_payload": "[{\"callStartTime\":\"Sep 2, 2026 12:18:37\",\"callState\":\"STARTED\",\"callUUID\":\"3f0c",
+  "thresholds": {
+    "maxQueue": 500,
+    "flushEveryMs": 15000,
+    "ratios": [
+      0.25,
+      0.5,
+      0.75,
+      1
+    ]
+  }
+}
+</script>
 
 <!-- Sample document: authored in Markdown, so it doubles as a live demo of the renderer -->
 <script id="sample-md" type="text/markdown">

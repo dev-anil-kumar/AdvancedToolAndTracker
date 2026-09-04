@@ -375,6 +375,7 @@ document.addEventListener('keydown', e => {
 $('#canvasHost').addEventListener('dragover', e => e.preventDefault());
 $('#canvasHost').addEventListener('drop', e => {
   e.preventDefault();
+  e.stopPropagation();           // the window handler must not read it again
   if (e.dataTransfer && e.dataTransfer.files.length) importFiles(e.dataTransfer.files);
 });
 

@@ -5,8 +5,8 @@
 
 /* ---------- Storage ---------- */
 export const DB_NAME = 'folio';
-export const DB_VER = 3;
-export const STORES = ['files', 'notes', 'prefs', 'drawings'];
+export const DB_VER = 4;
+export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs'];
 
 /* ---------- Layout ---------- */
 export const PER_ROW_MIN = 1;
@@ -72,6 +72,29 @@ export const FONTS = [
   { key: 'sans', label: 'Sans', stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif', scale: 1 },
   { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif', scale: 1.06 },
   { key: 'hand', label: 'Hand', stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive', scale: 1.42 }
+];
+
+/* ---------- JSON viewer ---------- */
+export const JSON_INDENT = 2;         // spaces, everywhere JSON is written out
+export const JSON_CHUNK = 200;        // tree children rendered per batch
+export const TABLE_CHUNK = 100;       // table rows rendered per batch
+export const TABLE_COLS_MAX = 40;     // columns a table will show
+export const TABLE_SCAN = 400;        // rows sampled to work out the columns
+export const JSON_OPEN_DEPTH = 2;     // levels expanded when a document opens
+export const JSON_CODE_MAX = 500000;  // chars before the code view stops colouring
+export const JSON_SEARCH_HITS = 500;  // matches a search will chase before stopping
+export const JSON_PEEK = 72;          // chars of a collapsed value shown inline
+export const STRING_INLINE = 240;     // chars of a string shown on its own row
+export const STRING_FULL = 20000;     // chars of it shown when the row is opened
+export const JSON_SAVE_MS = 600;      // debounce before an edit reaches storage
+
+/** The five ways to look at a document. Order is the order of the switch. */
+export const JSON_MODES = [
+  { key: 'tree',  label: 'Tree',  hint: 'Collapsible outline — the default reading view' },
+  { key: 'table', label: 'Table', hint: 'Any array of objects, as rows and columns' },
+  { key: 'code',  label: 'Code',  hint: 'Formatted and coloured, with line numbers' },
+  { key: 'raw',   label: 'Raw',   hint: 'Exactly the text you opened, untouched' },
+  { key: 'edit',  label: 'Edit',  hint: 'Change the text, with live validation' }
 ];
 
 /* ---------- Note highlight palette ---------- */

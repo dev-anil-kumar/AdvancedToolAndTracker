@@ -1,8 +1,9 @@
 # Folio
 
-A quiet, local-first Markdown reader. Open documents from your disk or a public URL,
-read several side by side, and keep notes from anything you select. Everything is
-stored in your browser — no accounts, no server, no telemetry.
+A quiet, local-first reader for Markdown and JSON. Open documents from your disk or a
+public URL, read several side by side, keep notes from anything you select, sketch a
+diagram, and pick apart a JSON dump — including the JSON that arrives stuffed inside a
+string. Everything is stored in your browser — no accounts, no server, no telemetry.
 
 Static files only: **no build step, no bundler, no framework.** Deploys to GitHub Pages
 by pushing.
@@ -39,7 +40,7 @@ Optional, and only needed for development:
 
 ```bash
 npm install
-npm test      # integration smoke test: 191 assertions through the real module graph
+npm test      # integration smoke test: 308 assertions through the real module graph
 npm run lint  # ESLint; no-undef is what catches a missing import with no bundler
 ```
 
@@ -61,14 +62,19 @@ assets/
     workspace.css           tab strip, pane grid, gutters, floating panes, focus mode
     views.css               Home and Notes pages
     canvas.css              tool strip, drawing surface, shapes
+    json.css                JSON toolbar, tree, table, code, source pane
     responsive.css          breakpoints, and the last word on [hidden]
   js/
     main.js                 wiring and boot
     core/                   dom · bus · config · db · state · router · format · toast
     md/renderer.js          marked → DOMPurify → highlight.js → enhancements
     features/               theme · highlight · library · workspaces · panes ·
-                            pane-resize · notes · exporter · focus
-    ui/                     shell · home · notes-view · dialogs
+                            pane-resize · notes · exporter · focus · drawings ·
+                            jsondocs
+    features/canvas/        model · editor
+    features/json/          model · tree · table · code
+    ui/                     shell · home · notes-view · dialogs · canvas-view ·
+                            json-view
 ```
 
 ### The one rule
@@ -116,7 +122,7 @@ changed an array. Questions are asked through selectors (`fileById`, `panesIn`,
 
 ### Storage
 
-IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings`), wrapped in `core/db.js` with
+IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings` / `jsondocs`), wrapped in `core/db.js` with
 an in-memory fallback so a browser that blocks storage degrades to session-only
 instead of breaking. Writes go through `persist()`, which never rejects — it warns
 once and carries on. Nothing uses `localStorage`.
@@ -137,6 +143,11 @@ Four, all pinned, all from a CDN, all loaded by `index.html`:
 | DOMPurify | 3.1.6 | Sanitising rendered HTML |
 | highlight.js | 11.9.0 | Fenced code, dark in both themes |
 | Google Fonts | — | Source Serif 4 and Inter |
+
+The JSON view adds no dependencies: its parser is `JSON.parse`, and its colouring is a
+tokeniser in `features/json/model.js`. highlight.js would have done the job, except that
+it paints an object's key and a string value the same colour — which is exactly the
+distinction a reader of unfamiliar data needs.
 
 ## Features
 
@@ -183,5 +194,31 @@ Four, all pinned, all from a CDN, all loaded by `index.html`:
   - Rectangle is the tool a fresh canvas starts on: open one and drag.
   - Autosaves; exports `.json` (lossless, re-importable), `.svg` or `.png`; imports by
     button or by dropping a file on the canvas.
-- **Accessibility** — real tab/tabpanel and separator roles, visible focus rings,
-  `prefers-reduced-motion` respected, keyboard paths for the drag interactions.
+- **JSON** — open a `.json` file, paste it, or fetch a URL; it lands in the library like
+  any other document. Five ways to look at the same data, switched with the segmented
+  control or <kbd>1</kbd>–<kbd>5</kbd>:
+  - **Tree** — collapsible and coloured by type, with a summary beside every closed
+    branch. Children are built when a branch opens and long arrays arrive 200 at a time,
+    so a three-megabyte dump opens instantly. Real `tree`/`treeitem` roles and arrow-key
+    navigation; click a row for its path in JavaScript accessor notation.
+  - **Table** — any array of objects as rows and columns, sortable per column, filtered
+    by the same Find box. Every array of objects in the document is offered by path,
+    embedded ones included. Click a nested cell and the tree opens at exactly that value.
+  - **Code** — the whole thing formatted, coloured and numbered, keys distinguished from
+    string values. *Unwrap* replaces every JSON-inside-a-string with the document it
+    holds, which is usually the difference between unreadable and obvious.
+  - **Raw** — the text exactly as it arrived, untouched.
+  - **Edit** — a source pane that says what broke and on which line, then puts the caret
+    there. V8 stopped reporting a character position in 2023, so Folio finds it itself.
+    *Format*, *Minify* and *Sort keys* rewrite the source in place.
+  - **JSON inside a string** — a field like `"queue": "[{\"callState\":\"STARTED\"}]"` is
+    recognised as the document it is and expands like any other branch, however many
+    times it is nested. Editing a value inside one is written back out through the
+    string. One that was truncated in transit is labelled rather than shown as a wall of
+    escapes.
+  - **Editing without spoiling the reading** — the tree grows no controls at all until
+    *Edit values* is switched on. Then a click edits a value, a double-click renames a
+    key, and `+`/`×` add and remove entries; what you type is read as JSON if it parses
+    and as a string if it does not. Everything autosaves.
+- **Accessibility** — real tab/tabpanel, tree/treeitem and separator roles, visible focus
+  rings, `prefers-reduced-motion` respected, keyboard paths for the drag interactions.

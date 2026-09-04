@@ -21,7 +21,7 @@ import { $ } from './core/dom.js';
 import { dbAll } from './core/db.js';
 import { hashView, route } from './core/router.js';
 import {
-  loadPrefs, setActiveWs, setDrawings, setFiles, setNotes, workspaces
+  loadPrefs, setActiveWs, setDrawings, setFiles, setJsonDocs, setNotes, workspaces
 } from './core/state.js';
 
 import { applyTheme, toggleTheme } from './features/theme.js';
@@ -36,6 +36,7 @@ import { renderHome, toggleShowAll } from './ui/home.js';
 import { renderNotes } from './ui/notes-view.js';
 import { promptPaste, promptUrl } from './ui/dialogs.js';
 import { pickDrawingFile, renderDrawings } from './ui/canvas-view.js';
+import { openJsonFiles, renderJsonDocs } from './ui/json-view.js';
 
 /* ================= Wiring ================= */
 const pickFile = () => $('#fileInput').click();
@@ -67,7 +68,15 @@ addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); })
 addEventListener('drop', e => {
   e.preventDefault();
   dragDepth = 0;
-  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  const dropped = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
+  if (!dropped.length) return;
+  /* Sort by what the file is: JSON opens in the JSON view, the rest are read
+     as Markdown. A drawing dropped on the canvas never reaches here — that
+     handler stops it. */
+  const json = dropped.filter(f => /\.(json|jsonc|geojson|ndjson)$/i.test(f.name));
+  const docs = dropped.filter(f => !json.includes(f));
+  if (json.length) openJsonFiles(json);
+  if (docs.length) handleFiles(docs);
 });
 
 /* ================= Boot ================= */
@@ -76,10 +85,13 @@ addEventListener('drop', e => {
   initShell();
 
   try {
-    const [f, n, dr] = await Promise.all([dbAll('files'), dbAll('notes'), dbAll('drawings')]);
+    const [f, n, dr, js] = await Promise.all([
+      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs')
+    ]);
     setFiles(f || []);
     setNotes((n || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     setDrawings(dr || []);
+    setJsonDocs(js || []);
   } catch (err) {
     console.warn('Folio: could not read saved data', err);
   }
@@ -94,6 +106,7 @@ addEventListener('drop', e => {
   renderHome();
   renderNotes();
   renderDrawings();
+  renderJsonDocs();
   emit(EVENTS.PANES);
   route(hashView() || 'home', { replace: true });
 })();

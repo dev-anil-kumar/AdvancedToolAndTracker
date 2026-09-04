@@ -7,7 +7,8 @@
 import { DB_NAME, DB_VER, STORES } from './config.js';
 import { toast } from './toast.js';
 
-const mem = { files: new Map(), notes: new Map() };
+/* One bucket per store, so the fallback covers everything STORES lists. */
+const mem = Object.fromEntries(STORES.map(name => [name, new Map()]));
 let dbPromise = null, storageWarned = false;
 
 export function openDB() {

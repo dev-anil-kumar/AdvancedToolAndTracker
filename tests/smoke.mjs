@@ -50,7 +50,7 @@ const d = window.document;
 
 /* jsdom does not fetch <link> stylesheets here, and several assertions read
    computed styles, so inline the split CSS in the order index.html lists it. */
-const CSS_ORDER = ['tokens', 'base', 'markdown', 'workspace', 'views', 'canvas', 'responsive'];
+const CSS_ORDER = ['tokens', 'base', 'markdown', 'workspace', 'views', 'canvas', 'json', 'responsive'];
 const style = d.createElement('style');
 style.textContent = (await Promise.all(
   CSS_ORDER.map(name => readFile(resolve(here, '../assets/css/' + name + '.css'), 'utf8'))
@@ -394,6 +394,9 @@ const setText = async (value) => {
 };
 let canvasScene = () => ({ shapes: [] });
 
+const { DB_NAME, DB_VER } = await import('../assets/js/core/config.js');
+const appState = await import('../assets/js/core/state.js');
+const jsonDocsNow = () => appState.jsonDocsByRecency();
 const editor0 = await import('../assets/js/features/canvas/editor.js');
 const editor = editor0;
 
@@ -928,7 +931,7 @@ await wait(150);
 ok('both drawings listed on Home', qa('#drawingRows .row-item').length === 2,
   qa('#drawingRows .row-item').length + ' rows');
 const stored = await new Promise((res, rej) => {
-  const req = window.indexedDB.open('folio', 3);
+  const req = window.indexedDB.open(DB_NAME, DB_VER);
   req.onsuccess = () => {
     const tx = req.result.transaction('drawings').objectStore('drawings').getAll();
     tx.onsuccess = () => res(tx.result);
@@ -938,6 +941,434 @@ const stored = await new Promise((res, rej) => {
 });
 ok('drawings are in IndexedDB', stored.length === 2 && stored.every(r => Array.isArray(r.shapes)),
   stored.length + ' records');
+
+/* ============================= JSON ============================= */
+const jsonMode = (key) => click(qa('#jModes button').find(b => b.dataset.mode === key));
+const jrows = () => qa('#jTreeHost .jrow');
+/* Match on the key itself: a parent's summary line quotes its children's
+   names, so searching the whole row's text finds the wrong row. */
+const jrow = (key) => jrows().find(r => {
+  const k = r.querySelector('.jkey');
+  return k && k.textContent === String(key);
+});
+const jrowText = (needle) => jrows().find(r => r.querySelector('.jval').textContent.includes(needle));
+const twistOf = (row) => row.querySelector('.jtwist');
+const openRow = async (key) => { click(twistOf(jrow(key))); await wait(60); };
+/* Some branches arrive open, so "open this one" has to check first. */
+const ensureOpen = async (key) => {
+  const row = jrow(key);
+  if (row && row.parentElement.classList.contains('closed')) await openRow(key);
+};
+const jtype = (sel) => (q(sel) ? q(sel).dataset.type : null);
+const pasteJson = async (title, text) => {
+  click(q('#jPaste'));
+  q('#jsonTitle').value = title || '';
+  q('#jsonText').value = text;
+  submit(q('#jsonForm'));
+  await wait(120);
+};
+
+section('json: opening the sample');
+click(q('#tab-json'));
+await wait(80);
+ok('empty state until something is open', !q('#jsonEmpty').hidden);
+click(q('#jsonEmptySample'));
+await wait(200);
+ok('json view is showing', shownViews() === 'view-json', shownViews());
+ok('empty state gone', q('#jsonEmpty').hidden);
+ok('five ways to look at it', qa('#jModes button').length === 5,
+  qa('#jModes button').map(b => b.dataset.mode).join(','));
+ok('tree is the default', q('#jModes button[data-mode="tree"]').getAttribute('aria-pressed') === 'true');
+ok('tab badge counts the document', q('#tabJsonN').textContent === '1', q('#tabJsonN').textContent);
+ok('title shown in the toolbar', /sample\.json$/.test(q('#jName').value), q('#jName').value);
+ok('no error banner for valid json', q('#jError').hidden);
+
+section('json: the tree');
+ok('rows rendered', jrows().length > 8, jrows().length + ' rows');
+ok('the document opens partly expanded', !!jrow('device') && !!jrow('osVersion'),
+  jrows().length + ' rows');
+ok('but not all the way down', !jrow('temperatureC'));
+ok('types are coloured apart', new Set([
+  window.getComputedStyle(q('#jTreeHost .jlit.string')).color,
+  window.getComputedStyle(q('#jTreeHost .jlit.number')).color,
+  window.getComputedStyle(q('#jTreeHost .jlit.boolean')).color,
+  window.getComputedStyle(q('#jTreeHost .jlit.null')).color
+]).size === 4);
+ok('numbers are numbers', !!jrow('total_call_rec_synced').querySelector('.jlit.number'));
+ok('booleans are booleans', !!jrow('is_auto_dialer_enabled').querySelector('.jlit.boolean'));
+ok('null is null', !!jrow('last_sync_error').querySelector('.jlit.null'));
+ok('a branch shows a summary rather than its contents',
+  /keys/.test(jrow('device').querySelector('.jsum').textContent),
+  jrow('device').querySelector('.jsum').textContent);
+ok('nesting is indented', Number(jrow('osVersion').style.getPropertyValue('--d')) >
+  Number(jrow('device').style.getPropertyValue('--d')),
+  jrow('osVersion').style.getPropertyValue('--d') + ' vs ' + jrow('device').style.getPropertyValue('--d'));
+await openRow('device');
+ok('a branch closes on its twisty', !jrow('osVersion'));
+await openRow('device');
+ok('and opens again', !!jrow('osVersion'));
+await openRow('battery');
+ok('one more level down', !!jrow('temperatureC'));
+await openRow('permissions');
+ok('array indices read as indices',
+  !!jrow(0) && jrow(0).querySelector('.jkey').classList.contains('idx'));
+ok('a leaf has no twisty to press', twistOf(jrow('osVersion')).disabled);
+ok('the tree is a real tree to a screen reader',
+  q('#jTreeHost').getAttribute('role') === 'tree' &&
+  qa('#jTreeHost [role="treeitem"]').length === jrows().length &&
+  qa('#jTreeHost [role="group"]').length > 0,
+  qa('#jTreeHost [role="treeitem"]').length + ' treeitems, ' +
+  qa('#jTreeHost [role="group"]').length + ' groups');
+ok('levels are announced', jrow('osVersion').parentElement.getAttribute('aria-level') === '3',
+  jrow('osVersion').parentElement.getAttribute('aria-level'));
+ok('a branch says whether it is open',
+  jrow('device').parentElement.getAttribute('aria-expanded') === 'true' &&
+  !jrow('osVersion').parentElement.hasAttribute('aria-expanded'));
+ok('a row has a spoken name of its own',
+  /^appVersion: /.test(jrow('appVersion').parentElement.getAttribute('aria-label')),
+  jrow('appVersion').parentElement.getAttribute('aria-label'));
+/* Keyboard: the treeitems are what move, not the rows. */
+jrow('device').parentElement.focus();
+q('#jTreeHost').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+await wait(40);
+ok('arrow keys walk the tree', d.activeElement.getAttribute('role') === 'treeitem' &&
+  d.activeElement !== jrow('device').parentElement,
+  d.activeElement.getAttribute('aria-label'));
+q('#jTreeHost').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+await wait(40);
+click(jrow('appVersion').querySelector('.jval'));
+await wait(60);
+ok('clicking a row names it in the breadcrumb', q('#jCrumbPath').textContent === 'device.appVersion',
+  q('#jCrumbPath').textContent);
+ok('and gives its type', q('#jCrumbType').textContent === 'string', q('#jCrumbType').textContent);
+
+section('json: JSON hidden inside a string');
+/* Back to just the top level, so an index means the one we mean. */
+click(q('#jCollapse'));
+await wait(80);
+await openRow('$');
+const queueRow = jrow('synced_call_details_queue');
+ok('recognised as a document, not a string',
+  !!queueRow.querySelector('.jchip') && /JSON in a string/.test(queueRow.querySelector('.jchip').textContent),
+  queueRow.querySelector('.jchip') ? queueRow.querySelector('.jchip').textContent : 'no chip');
+ok('summarised as the array it is', /4 items/.test(queueRow.querySelector('.jsum').textContent),
+  queueRow.querySelector('.jsum').textContent);
+ok('an ordinary string is not mistaken for one',
+  !/JSON in a string/.test(jrow('notes').textContent));
+await ensureOpen('synced_call_details_queue');
+ok('it expands like any other branch', !!jrow(0) && !!jrow(3), jrows().length + ' rows');
+await openRow(0);
+ok('records inside are real structure', !!jrow('callUUID') && !!jrow('sanitizedCustomerNumber'));
+ok('their values keep their types', !!jrow('creationTimeMillis').querySelector('.jlit.number'));
+click(jrow('callUUID').querySelector('.jval'));
+await wait(40);
+ok('the path shows the string boundary it crossed',
+  q('#jCrumbPath').textContent === 'synced_call_details_queue » [0].callUUID',
+  q('#jCrumbPath').textContent);
+await ensureOpen('retry_envelope');
+await ensureOpen('payload');
+ok('a document nested twice over opens too', !!jrow('backoff') && !!jrow('lastError'),
+  jrows().length + ' rows');
+ok('the truncated field is called out, not silently shown as a string',
+  /truncated JSON/.test(jrow('truncated_payload').textContent),
+  jrow('truncated_payload').textContent.slice(0, 70));
+ok('a multi-line string is flagged', /multi-line/.test(jrow('notes').textContent));
+click(jrow('notes').querySelector('.jval'));
+await wait(40);
+ok('and reads as itself once selected',
+  q('#jTreeHost .jstring-full').textContent.split('\n').length === 2,
+  JSON.stringify(q('#jTreeHost .jstring-full').textContent.slice(0, 30)));
+
+section('json: find');
+const rowsBeforeSearch = jrows().length;
+q('#jSearch').value = 'ANSWERED';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(260);
+ok('matches counted', /match/.test(q('#jHits').textContent), q('#jHits').textContent);
+ok('the tree filters down to the matches', jrows().length < 40 && !!jrowText('ANSWERED'),
+  jrows().length + ' rows');
+ok('the match is reached through the embedded document', !!jrow('synced_call_details_queue'));
+ok('and unrelated branches are gone', !jrow('device'));
+q('#jSearch').value = '';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
+ok('clearing the search puts back exactly what was open before it',
+  jrows().length === rowsBeforeSearch, jrows().length + ' vs ' + rowsBeforeSearch + ' rows');
+
+section('json: expand and collapse');
+click(q('#jExpand'));
+await wait(150);
+const wideOpen = jrows().length;
+ok('expand opens everything', wideOpen > 60, wideOpen + ' rows');
+click(q('#jCollapse'));
+await wait(80);
+ok('collapse closes everything', jrows().length === 1, jrows().length + ' rows');
+await openRow('$');
+ok('the root opens again', jrows().length > 8, jrows().length + ' rows');
+
+section('json: table');
+jsonMode('table');
+await wait(150);
+ok('table view is showing', !q('#jTableHost').hidden && q('#jTreeHost').hidden);
+ok('the biggest array was chosen', qa('#jTableHost tbody tr').length === 4,
+  qa('#jTableHost tbody tr').length + ' rows');
+ok('columns are the union of the record keys', qa('#jTableHost thead th').length > 9,
+  qa('#jTableHost thead th').length + ' columns');
+const heads = qa('#jTableHost .jt-sort').map(b => b.textContent);
+ok('the array it tabulated was the one inside a string',
+  heads.includes('callUUID') && heads.includes('sanitizedCustomerNumber'), heads.join(','));
+ok('a picker is only offered when there is a choice', q('#jTables').hidden);
+ok('rows are numbered', q('#jTableHost .jt-n').textContent === '#');
+ok('missing fields read as missing', qa('#jTableHost .jt-empty').length > 0);
+const durationCol = qa('#jTableHost .jt-sort').findIndex(b => b.textContent === 'duration');
+click(qa('#jTableHost .jt-sort')[durationCol]);
+await wait(80);
+const durations = qa('#jTableHost tbody tr').map(tr => Number(tr.children[durationCol + 1].textContent) || 0);
+ok('a column sorts', durations.join(',') === durations.slice().sort((a, b) => a - b).join(','), durations.join(','));
+q('#jSearch').value = 'missed';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
+ok('the table filters', qa('#jTableHost tbody tr').length === 1,
+  qa('#jTableHost tbody tr').length + ' rows');
+q('#jSearch').value = '';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
+click(q('#jTableHost .link-chip'));
+await wait(150);
+ok('a nested cell hands you back to the tree', !q('#jTreeHost').hidden && !!q('#jTreeHost .jrow.sel'));
+ok('and it is the cell you clicked', /recording/.test(q('#jCrumbPath').textContent),
+  q('#jCrumbPath').textContent);
+
+section('json: code');
+jsonMode('code');
+await wait(150);
+ok('code view is showing', !q('#jCodeHost').hidden);
+ok('line numbers in the gutter', /^1\n2\n3/.test(q('.jc-gutter').textContent));
+ok('a key is coloured apart from a string value',
+  window.getComputedStyle(q('.jc-key')).color !== window.getComputedStyle(q('.jc-string')).color,
+  window.getComputedStyle(q('.jc-key')).color + ' vs ' + window.getComputedStyle(q('.jc-string')).color);
+ok('every token kind is coloured',
+  ['key', 'string', 'number', 'boolean', 'null'].every(k => !!q('.jc-' + k)));
+ok('punctuation takes the block colour rather than a span of its own',
+  !q('.jc-punct') && window.getComputedStyle(q('.jc-code')).color === 'var(--j-punct)',
+  window.getComputedStyle(q('.jc-code')).color);
+ok('nested json is still escaped by default',
+  /\\"sanitizedCustomerNumber\\"/.test(q('.jc-code').textContent));
+click(q('#jUnwrap'));
+await wait(150);
+ok('unwrap opens the nested documents out',
+  !/\\"sanitizedCustomerNumber\\"/.test(q('.jc-code').textContent) &&
+  /^\s+"sanitizedCustomerNumber": "\+91/m.test(q('.jc-code').textContent));
+ok('a nested document two strings deep is opened out as well',
+  /^\s+"lastError": "socket hang up"/m.test(q('.jc-code').textContent));
+ok('but one that cannot be parsed is left exactly as it is',
+  /"truncated_payload": "\[\{\\"callStartTime/.test(q('.jc-code').textContent));
+ok('unwrap is a toggle', q('#jUnwrap').getAttribute('aria-pressed') === 'true');
+ok('the status line counts the nested documents', /nested document/.test(q('#jStats').textContent),
+  q('#jStats').textContent);
+q('#jSearch').value = 'ANSWERED';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(260);
+ok('search marks the code', qa('.jc-hit').length > 0, qa('.jc-hit').length + ' marks');
+q('#jSearch').value = '';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
+click(q('#jUnwrap'));
+await wait(120);
+
+section('json: raw');
+jsonMode('raw');
+await wait(100);
+const sampleText = q('#sample-json').textContent.trim();
+ok('raw is exactly what was opened', q('#jRaw').textContent === sampleText,
+  q('#jRaw').textContent.length + ' vs ' + sampleText.length + ' chars');
+ok('find is put away where it means nothing', q('#jSearch').hidden);
+
+section('json: editing a value in the tree');
+jsonMode('tree');
+await wait(120);
+ok('reading has no edit affordances', qa('#jTreeHost .jval.editable').length === 0);
+click(q('#jEditable'));
+await wait(120);
+ok('edit values is a toggle', q('#jEditable').getAttribute('aria-pressed') === 'true');
+ok('values become clickable', qa('#jTreeHost .jval.editable').length > 0);
+click(jrow('total_call_rec_synced').querySelector('.jval'));
+await wait(60);
+ok('clicking a value opens an input', !!q('#jTreeHost .jedit'));
+q('#jTreeHost .jedit').value = '9001';
+q('#jTreeHost .jedit').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(120);
+ok('the new value is typed, not stringified',
+  /9001/.test(jrow('total_call_rec_synced').textContent) &&
+  !!jrow('total_call_rec_synced').querySelector('.jlit.number'),
+  jrow('total_call_rec_synced').textContent.slice(0, 40));
+await wait(700);
+ok('the edit reached the document', /"total_call_rec_synced": 9001/.test(jsonDocsNow()[0].text),
+  (jsonDocsNow()[0].text.match(/"total_call_rec_synced":[^,]*/) || [''])[0]);
+ok('the status line says it is saved', q('#jSaved').textContent === 'Saved', q('#jSaved').textContent);
+
+section('json: editing inside an embedded document');
+await ensureOpen('synced_call_details_queue');
+await ensureOpen(0);
+click(jrow('leadIdentifier').querySelector('.jval'));
+await wait(60);
+q('#jTreeHost .jedit').value = 'ipt::000001';
+q('#jTreeHost .jedit').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(800);
+const reread = JSON.parse(jsonDocsNow()[0].text);
+ok('an edit inside a string-borne document is written back through the string',
+  JSON.parse(reread.synced_call_details_queue)[0].leadIdentifier === 'ipt::000001',
+  JSON.parse(reread.synced_call_details_queue)[0].leadIdentifier);
+ok('the surrounding document is still valid JSON', typeof reread.synced_call_details_queue === 'string');
+click(q('#jEditable'));
+await wait(80);
+
+section('json: the source pane');
+jsonMode('edit');
+await wait(120);
+ok('the source pane holds the text', q('#jEditArea').value.length > 100);
+q('#jEditArea').value = '{ "a": 1, "b": [1, 2, }';
+q('#jEditArea').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(320);
+ok('a broken document is reported', !q('#jError').hidden && /Invalid JSON/.test(q('#jError').textContent),
+  q('#jError').textContent.slice(0, 80));
+ok('with a line and column', /line \d+, column \d+/.test(q('#jError').textContent),
+  q('#jError').textContent.slice(0, 90));
+ok('format refuses to run on it',
+  (click(q('#jFormat')), await wait(60), /Fix the syntax/.test(q('#toast').textContent)),
+  q('#toast').textContent.slice(0, 40));
+q('#jEditArea').value = '{"b":[3,1,2],"a":{"z":1,"y":2}}';
+q('#jEditArea').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(320);
+ok('fixing it clears the banner', q('#jError').hidden);
+click(q('#jFormat'));
+await wait(120);
+ok('format re-indents', /^\{\n  "b": \[/.test(q('#jEditArea').value), JSON.stringify(q('#jEditArea').value.slice(0, 18)));
+click(q('#jSortKeys'));
+await wait(120);
+ok('sort keys sorts every object', /"a":[\s\S]*"y"[\s\S]*"z"[\s\S]*"b"/.test(q('#jEditArea').value),
+  q('#jEditArea').value.replace(/\s+/g, ''));
+ok('arrays keep their order', /\[\s*3,\s*1,\s*2\s*\]/.test(q('#jEditArea').value));
+click(q('#jMinify'));
+await wait(120);
+ok('minify strips the whitespace', q('#jEditArea').value === '{"a":{"y":2,"z":1},"b":[3,1,2]}',
+  q('#jEditArea').value);
+await wait(700);
+ok('the source edit was saved', jsonDocsNow()[0].text === '{"a":{"y":2,"z":1},"b":[3,1,2]}',
+  jsonDocsNow()[0].text.slice(0, 40));
+
+section('json: keyboard');
+jsonMode('tree');
+await wait(100);
+const pressJson = (key, opts) => d.dispatchEvent(new window.KeyboardEvent('keydown',
+  Object.assign({ key, bubbles: true }, opts || {})));
+pressJson('3');
+await wait(100);
+ok('a number picks a view', q('#jModes button[data-mode="code"]').getAttribute('aria-pressed') === 'true');
+pressJson(']');
+await wait(100);
+ok('brackets step through them', q('#jModes button[data-mode="raw"]').getAttribute('aria-pressed') === 'true');
+pressJson('[');
+await wait(100);
+ok('in both directions', q('#jModes button[data-mode="code"]').getAttribute('aria-pressed') === 'true');
+pressJson('/');
+await wait(60);
+ok('slash reaches the find box', d.activeElement === q('#jSearch'), d.activeElement.id);
+q('#jSearch').blur();
+pressJson('f', { metaKey: true });
+await wait(60);
+ok('so does the usual find shortcut', d.activeElement === q('#jSearch'), d.activeElement.id);
+q('#jSearch').blur();
+jsonMode('tree');
+await wait(100);
+
+section('json: a second document');
+await pasteJson('Deploys', '[{"env":"prod","ok":true},{"env":"staging","ok":false}]');
+ok('two documents in the library', jsonDocsNow().length === 2, jsonDocsNow().length + ' documents');
+ok('the pasted one is on screen', q('#jName').value === 'Deploys', q('#jName').value);
+ok('an array root tabulates straight away',
+  (jsonMode('table'), await wait(150), qa('#jTableHost tbody tr').length) === 2,
+  qa('#jTableHost tbody tr').length + ' rows');
+
+await pasteJson('Broken', '{"nope"');
+ok('an invalid paste is still kept', jsonDocsNow().length === 3);
+ok('and opens in the source pane', q('#jModes button[data-mode="edit"]').getAttribute('aria-pressed') === 'true');
+ok('with the reason', /Invalid JSON/.test(q('#jError').textContent), q('#jError').textContent.slice(0, 60));
+jsonMode('tree');
+await wait(100);
+ok('the tree says why it is empty rather than showing nothing',
+  /until the syntax parses/.test(q('#jTreeHost').textContent), q('#jTreeHost').textContent.slice(0, 40));
+jsonMode('code');
+await wait(100);
+ok('the code view still shows the broken text', /nope/.test(q('.jc-code').textContent));
+
+section('json: opening from a URL');
+const jsonRequested = [];
+const previousFetch = window.fetch;
+window.fetch = async (url) => {
+  jsonRequested.push(String(url));
+  if (/notjson/.test(url)) return { ok: true, status: 200, text: async () => '<!doctype html><html></html>' };
+  if (/missing/.test(url)) return { ok: false, status: 404, statusText: 'Not Found', text: async () => '' };
+  return { ok: true, status: 200, text: async () => '{"from":"the network","rows":[1,2,3]}' };
+};
+globalThis.fetch = window.fetch;
+click(q('#jUrl'));
+q('#jsonUrlField').value = 'https://x.dev/data/config.json';
+submit(q('#jsonUrlForm'));
+await wait(200);
+ok('the file was requested', jsonRequested[0] === 'https://x.dev/data/config.json', jsonRequested[0]);
+ok('named after the file', q('#jName').value === 'config.json', q('#jName').value);
+jsonMode('tree');
+await wait(150);
+ok('and opened in the tree', !!jrow('from'), jrows().length + ' rows');
+/* The source pane commits on blur, and a blur can land after another document
+   has been opened. It must never write the old text into the new record. */
+q('#jEditArea').dispatchEvent(new window.Event('blur'));
+await wait(700);
+ok('a late blur from the source pane cannot corrupt the new document',
+  JSON.parse(jsonDocsNow()[0].text).from === 'the network',
+  jsonDocsNow()[0].text.slice(0, 60));
+for (const [label, url, expect] of [
+  ['a web page is refused', 'https://x.dev/notjson.json', /not JSON/],
+  ['a 404 is reported', 'https://x.dev/missing.json', /answered 404/]
+]) {
+  click(q('#jUrl'));
+  q('#jsonUrlField').value = url;
+  submit(q('#jsonUrlForm'));
+  await wait(150);
+  ok(label, expect.test(q('#jsonUrlErr').textContent), q('#jsonUrlErr').textContent.slice(0, 46));
+}
+q('#jsonUrlDlg').close();
+window.fetch = previousFetch;
+globalThis.fetch = previousFetch;
+
+section('json: home and persistence');
+click(q('#tab-home'));
+await wait(120);
+ok('the JSON section lists them', qa('#jsonRows .row-item').length === 4,
+  qa('#jsonRows .row-item').length + ' rows');
+ok('an invalid document is labelled', /invalid/.test(q('#jsonRows').textContent));
+ok('the tab badge follows', q('#tabJsonN').textContent === '4', q('#tabJsonN').textContent);
+saved.files.length = 0;
+click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn'));
+await wait(120);
+ok('a document saves as .json', saved.files.length === 1 && saved.files[0].name.endsWith('.json'),
+  saved.files[0] && saved.files[0].name);
+const storedJson = await new Promise((res, rej) => {
+  const req = window.indexedDB.open(DB_NAME, DB_VER);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('jsondocs').objectStore('jsondocs').getAll();
+    tx.onsuccess = () => res(tx.result);
+    tx.onerror = () => rej(tx.error);
+  };
+  req.onerror = () => rej(req.error);
+});
+ok('documents are in IndexedDB', storedJson.length === 4 && storedJson.every(r => typeof r.text === 'string'),
+  storedJson.length + ' records');
+click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn.danger'));
+await wait(150);
+ok('and can be removed', qa('#jsonRows .row-item').length === 3,
+  qa('#jsonRows .row-item').length + ' rows');
 
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');
 if (consoleErrors.length) {

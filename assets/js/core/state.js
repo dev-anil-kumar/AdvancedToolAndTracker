@@ -17,6 +17,7 @@ export let files = [];          // { id, name, kind, source, content, size, adde
 export let notes = [];          // { id, fileId, fileName, quote, blockIndex, headingId, headingText, createdAt }
 export let panes = [];          // { key, fileId, wsId, el, floating, geom }
 export let drawings = [];       // { id, name, shapes, view, createdAt, updatedAt }
+export let jsondocs = [];       // { id, name, text, source, createdAt, updatedAt }
 
 export async function loadPrefs() {
   try {
@@ -41,6 +42,7 @@ export function setPanes(next) { panes = next; }
 export function setWorkspaces(next) { workspaces = next; }
 export function setActiveWs(next) { activeWs = next; }
 export function setDrawings(next) { drawings = next; }
+export function setJsonDocs(next) { jsondocs = next; }
 
 /* ---------- Selectors: the only way other modules ask questions ---------- */
 export function fileById(id) { return files.find(f => f.id === id) || null; }
@@ -57,6 +59,11 @@ export function anyPaneFor(fileId) { return panes.find(p => p.fileId === fileId)
 export function drawingById(id) { return drawings.find(dr => dr.id === id) || null; }
 export function drawingsByRecency() {
   return drawings.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+export function jsonDocById(id) { return jsondocs.find(j => j.id === id) || null; }
+export function jsonDocsByRecency() {
+  return jsondocs.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
 export function documents() { return files.filter(f => f.kind !== 'paste'); }
