@@ -7,8 +7,9 @@
  */
 import { el } from '../core/dom.js';
 import { plural } from '../core/format.js';
-import { documents, fileById, notes, pastedDocs } from '../core/state.js';
+import { documents, fileById, filedNotes, notes, ownNotes, pastedDocs } from '../core/state.js';
 import { toast } from '../core/toast.js';
+import { resolve } from './note-images.js';
 
 /* The three things this app can write out. */
 const FILE_TYPES = {
@@ -31,7 +32,9 @@ export function safeName(name, ext) {
     .trim()
     .slice(0, 120) || 'document';
   if (n.toLowerCase().endsWith(suffix.toLowerCase())) return n;
-  return n.replace(/\.(md|markdown|txt|json|svg)$/i, '') + suffix;
+  /* Every extension the app reads or writes, so "report.pdf" saved as
+     Markdown is "report.md" rather than "report.pdf.md". */
+  return n.replace(/\.(md|markdown|mdown|mkd|txt|json|svg|png|pdf|xlsx|xlsm|xlsb|xls|csv|tsv|ods)$/i, '') + suffix;
 }
 
 function uniqueName(used, prefix, name) {
@@ -150,6 +153,14 @@ function combineItems(items) {
 }
 
 export function noteMarkdown(note) {
+  if (note.kind === 'manual') {
+    /* Images go out as data URLs, so the exported file stands on its own with
+       no folder of pictures beside it to lose. */
+    return '# ' + (note.title || 'Untitled note') + '\n\n' + resolve(note.body || '').trim() + '\n\n' +
+      '*Written ' + new Date(note.createdAt).toLocaleString() +
+      (note.updatedAt && note.updatedAt !== note.createdAt
+        ? ' · last changed ' + new Date(note.updatedAt).toLocaleString() : '') + '*\n';
+  }
   const rec = fileById(note.fileId);
   const quote = note.quote.split('\n').map(l => '> ' + l).join('\n');
   return '# Note from ' + ((rec && rec.name) || note.fileName) + '\n\n' + quote + '\n\n' +
@@ -159,9 +170,22 @@ export function noteMarkdown(note) {
 
 export function allNotesMarkdown() {
   const groups = new Map();
-  notes.forEach(n => { if (!groups.has(n.fileId)) groups.set(n.fileId, []); groups.get(n.fileId).push(n); });
-  let out = '# Notes — Folio\n\n_' + plural(notes.length, 'note', 'notes') + ' across ' +
-    plural(groups.size, 'document', 'documents') + ' · exported ' + new Date().toLocaleString() + '_\n';
+  filedNotes().forEach(n => { if (!groups.has(n.fileId)) groups.set(n.fileId, []); groups.get(n.fileId).push(n); });
+  const own = ownNotes();
+  let out = '# Notes — Folio\n\n_' + plural(notes.length, 'note', 'notes') +
+    (groups.size ? ' across ' + plural(groups.size, 'document', 'documents') : '') +
+    ' · exported ' + new Date().toLocaleString() + '_\n';
+
+  if (own.length) {
+    out += '\n\n## Notes of your own\n';
+    own.slice()
+      .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0))
+      .forEach(n => {
+        out += '\n### ' + (n.title || 'Untitled note') + '\n\n' + resolve(n.body || '').trim() + '\n\n' +
+          '*' + new Date(n.updatedAt || n.createdAt).toLocaleString() + '*\n';
+      });
+  }
+
   groups.forEach((list, fileId) => {
     const rec = fileById(fileId);
     out += '\n\n## ' + ((rec && rec.name) || list[0].fileName) + '\n';

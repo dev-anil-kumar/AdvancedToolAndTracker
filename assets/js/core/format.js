@@ -23,6 +23,8 @@ export function formatBytes(n) {
   return (n / 1048576).toFixed(1) + ' MB';
 }
 export function kindLabel(rec) {
+  if (rec.kind === 'pdf') return 'PDF';
+  if (rec.kind === 'sheet') return 'Sheet';
   if (rec.kind === 'url') { try { return new URL(rec.source).hostname.replace(/^www\./, ''); } catch (e) { return 'Link'; } }
   if (rec.kind === 'paste') return 'Pasted';
   if (rec.kind === 'sample') return 'Sample';

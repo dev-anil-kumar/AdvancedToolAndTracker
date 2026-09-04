@@ -28,7 +28,7 @@ export function emit(event, payload) {
 /** The events this app uses, named in one place to avoid typo-driven bugs. */
 export const EVENTS = {
   LIBRARY: 'library',      // documents added, opened, or removed
-  NOTES: 'notes',          // a note was saved or deleted
+  NOTES: 'notes',          // a note was saved, edited, or deleted
   PANES: 'panes',          // panes or reading tabs changed
   PREFS: 'prefs',          // a setting changed
   VIEW: 'view',            // the active view changed

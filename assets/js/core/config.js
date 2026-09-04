@@ -5,8 +5,8 @@
 
 /* ---------- Storage ---------- */
 export const DB_NAME = 'folio';
-export const DB_VER = 4;
-export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs'];
+export const DB_VER = 5;
+export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images'];
 
 /* ---------- Layout ---------- */
 export const PER_ROW_MIN = 1;
@@ -20,12 +20,39 @@ export const DRAG_THRESHOLD = 8;      // px of travel before a pane pops out
 export const RESIZE_STEP = 32;        // px per arrow key press
 export const RESIZE_STEP_BIG = 96;    // px with shift held
 
+/* ---------- Other file types ----------
+   Two big libraries, pinned like the rest, but fetched only when someone
+   actually opens one of these files: together they are ten times the size of
+   the whole application, so loading them up front would make every visit pay
+   for a feature most visits do not use. */
+export const PDF_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+export const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+export const SHEET_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+export const PDF_PAGE_MAX = 400;      // pages read from one document
+export const SHEET_ROW_MAX = 4000;    // rows kept per sheet
+export const SHEET_COL_MAX = 40;      // columns kept per sheet
+export const HEAD_RATIO = 1.18;       // a line this much bigger than the body is a heading
+export const CHROME_SHARE = 0.4;      // a line on this share of pages is a header or footer
+
+/* Which reader a file goes to. Extension first: it is what the user sees, and
+   more dependable than the type a browser guesses. */
+export const FILE_KINDS = {
+  markdown: ['md', 'markdown', 'mdown', 'mkd', 'mdwn', 'txt', 'text'],
+  pdf: ['pdf'],
+  sheet: ['xlsx', 'xlsm', 'xlsb', 'xls', 'csv', 'tsv', 'ods'],
+  json: ['json', 'jsonc', 'geojson', 'ndjson']
+};
+
 /* ---------- Limits ---------- */
 export const MAX_OPEN_AT_ONCE = 6;    // files accepted from one drop or picker
 export const NOTE_QUOTE_MAX = 4000;   // characters stored per note
 export const RECENT_VISIBLE = 8;      // Home rows before "Show all"
 export const NOTE_CLAMP_CHARS = 240;  // longer than this gets an Expand control
 export const NOTE_CLAMP_LINES = 4;
+export const NOTE_BODY_MAX = 40000;   // characters in a note you write yourself
+export const IMAGE_MAX_BYTES = 6 * 1024 * 1024;   // per image, before it is refused
+export const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif'];
 
 /* ---------- Canvas ---------- */
 export const GRID = 20;               // dot spacing, in scene units

@@ -13,7 +13,7 @@ import {
   byRecency, documents, files, notes, pastedDocs, prefs,
   anyPaneFor, noteCountFor, savePrefs
 } from '../core/state.js';
-import { removeDoc } from '../features/library.js';
+import { describe, removeDoc } from '../features/library.js';
 import { openDoc, layoutAll } from '../features/panes.js';
 import { jumpToNote } from '../features/notes.js';
 import { applyHighlight } from '../features/highlight.js';
@@ -79,13 +79,23 @@ function fileRow(rec) {
   main.type = 'button';
   const name = el('div', 'row-name');
   name.appendChild(el('span', 't', rec.name));
-  name.appendChild(el('span', 'kind' + (open ? ' open' : ''), open ? 'Open' : kindLabel(rec)));
+  /* What it is, and separately whether it is open: a PDF is still a PDF while
+     you are reading it, and that is the more useful of the two facts. */
+  name.appendChild(el('span', 'kind', kindLabel(rec)));
+  if (open) name.appendChild(el('span', 'kind open', 'Open'));
   const n = noteCountFor(rec.id);
   const sub = [];
   sub.push(formatWhen(rec.openedAt || rec.addedAt));
-  if (rec.size) sub.push(formatBytes(rec.size));
+  /* A converted document is better described by what it came from than by the
+     length of the Markdown it turned into. */
+  if (rec.kind === 'pdf' || rec.kind === 'sheet') {
+    sub.push(describe(rec));
+    if (rec.sourceSize) sub.push(formatBytes(rec.sourceSize));
+  } else if (rec.size) {
+    sub.push(formatBytes(rec.size));
+  }
   if (n) sub.push(plural(n, 'note', 'notes'));
-  if (rec.kind === 'url') sub.push(rec.source);
+  if (/^https?:/i.test(rec.source || '')) sub.push(rec.source);
   main.append(name, el('div', 'row-sub', sub.join(' · ')));
   main.addEventListener('click', () => openDoc(rec.id));
 

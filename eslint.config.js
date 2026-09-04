@@ -15,7 +15,10 @@ export default [
         /* Pinned CDN libraries, loaded as classic scripts by index.html. */
         marked: 'readonly',
         DOMPurify: 'readonly',
-        hljs: 'readonly'
+        hljs: 'readonly',
+        /* Fetched on demand by features/convert, not by index.html. */
+        pdfjsLib: 'readonly',
+        XLSX: 'readonly'
       }
     },
     rules: {

@@ -49,7 +49,7 @@
   <section class="view" role="tabpanel" id="view-home" aria-labelledby="tab-home" tabindex="0">
     <div class="home">
       <h1>Folio</h1>
-      <p class="lede">A quiet reader for Markdown and JSON. Open files from your disk or a public link, read several side by side, and keep a note from anything you select. Drop a <code>.json</code> file in and read it as a tree, a table or coloured source.</p>
+      <p class="lede">A quiet reader for Markdown, PDF, spreadsheets and JSON. Open files from your disk or a public link, read several side by side, and keep a note from anything you select. A PDF or an <code>.xlsx</code> becomes a document you can read and annotate like any other; a <code>.json</code> opens as a tree, a table, a graph or coloured source.</p>
 
       <div class="quick">
         <button class="btn primary" id="qOpen" type="button">
@@ -67,6 +67,10 @@
         <button class="btn" id="canvasNew" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="M8 12h8M12 8.5v7"/></svg>
           New drawing
+        </button>
+        <button class="btn" id="qNote" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19.5V6a2 2 0 0 1 2-2h7l5 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z"/><path d="M13.5 4v5.5H19"/><path d="M9 14h5M9 17h3"/></svg>
+          Write a note
         </button>
         <button class="btn" id="qJson" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5C7 4.5 7.5 9.2 5 12c2.5 2.8 2 7.5 4.5 7.5"/><path d="M14.5 4.5c2.5 0 2 4.7 4.5 7.5-2.5 2.8-2 7.5-4.5 7.5"/></svg>
@@ -149,8 +153,10 @@
         <div class="sec-head"><span class="sec-title">Getting started</span></div>
         <p class="start-copy">
           Everything you open is kept in this browser so it's here next time — nothing is uploaded anywhere.
-          Drop a <code>.md</code> file anywhere on the window, or paste a link to a raw Markdown file
-          (a <code>raw.githubusercontent.com</code> URL, a Gist, or any server that allows cross-origin reads).
+          Drop a <code>.md</code>, <code>.pdf</code>, <code>.xlsx</code> or <code>.csv</code> file anywhere on the
+          window, or paste a link to one (a <code>raw.githubusercontent.com</code> URL, a Gist, or any server that
+          allows cross-origin reads). A PDF is read for its text, so it can be searched, quoted and noted like
+          anything else — a scan with no text in it has nothing to read.
           In the reading view, select text and choose <em>Save as note</em> to bookmark a passage —
           notes remember where they came from and jump you straight back. A <code>.json</code> file
           opens in the JSON view instead: a collapsible tree, a table of any array of records,
@@ -184,7 +190,7 @@
     <div class="read-empty" id="readEmpty">
       <div class="box">
         <h2>Nothing open in this tab</h2>
-        <p>Open a file, paste some Markdown, or pick something from Home. Open several and they sit side by side — drag a divider to resize, or drag a title bar to float one free. Add another reading tab to keep separate sets of documents.</p>
+        <p>Open a file — Markdown, PDF, or a spreadsheet — paste some Markdown, or pick something from Home. Open several and they sit side by side: drag a divider to resize, or drag a title bar to float one free. Add another reading tab to keep separate sets of documents.</p>
         <button class="btn primary" id="emptyOpen" type="button">Open file</button>
       </div>
     </div>
@@ -197,11 +203,26 @@
         <h1>Notes</h1>
         <span class="count" id="notesTotal"></span>
         <div class="spacer"></div>
+        <button class="btn primary" id="newNote" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          New note
+        </button>
         <button class="btn" id="saveAllNotes" type="button">Save all</button>
         <button class="btn" id="expandAll" type="button" aria-pressed="false">Expand all</button>
       </div>
       <div id="notesBody"></div>
-      <p class="empty-line" id="notesEmpty">No notes yet. In the reading view, select any passage and choose <em>Save as note</em>.</p>
+      <div class="notes-none" id="notesEmpty">
+        <p class="empty-line">No notes yet — there are two ways to make one.</p>
+        <p class="empty-line">
+          <strong>Write one here.</strong> A title, Markdown, and any images you paste, drop or pick.
+          It belongs to no document and stays in this browser with everything else.
+        </p>
+        <p class="empty-line">
+          <strong>Or keep a passage.</strong> In the reading view, select any text and choose
+          <em>Save as note</em> — it remembers where it came from and takes you back.
+        </p>
+        <button class="btn primary" id="emptyNewNote" type="button">Write a note</button>
+      </div>
     </div>
   </section>
   <!-- ================= CANVAS ================= -->
@@ -362,9 +383,11 @@
   </section>
 </main>
 
-<input type="file" id="fileInput" accept=".md,.markdown,.mdown,.mkd,.txt,text/markdown,text/plain" class="sr" multiple>
+<input type="file" id="fileInput" class="sr" multiple
+       accept=".md,.markdown,.mdown,.mkd,.mdwn,.txt,.text,.pdf,.xlsx,.xlsm,.xlsb,.xls,.csv,.tsv,.ods,text/markdown,text/plain,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet">
 <input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
 <input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.txt,application/json,text/plain" class="sr" multiple>
+<input type="file" id="noteImageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif" class="sr" multiple>
 
 <div class="selpop" id="selpop" hidden role="group" aria-label="Selection actions">
   <button class="btn tiny primary" id="selNote" type="button">Save as note</button>
@@ -380,7 +403,7 @@
 <dialog id="urlDlg" aria-labelledby="urlDlgTitle">
   <div class="dlg-head">
     <h2 id="urlDlgTitle">Open from URL</h2>
-    <p>A direct link to a Markdown file. Folio downloads it into this browser and renders it.</p>
+    <p>A direct link to a Markdown, PDF or spreadsheet file. Folio downloads it into this browser and reads it.</p>
   </div>
   <form class="dlg-body" id="urlForm">
     <label class="field-label" for="urlField">File URL</label>
@@ -425,6 +448,36 @@
   </form>
 </dialog>
 
+
+<dialog id="noteDlg" class="wide" aria-labelledby="noteDlgTitle">
+  <div class="dlg-head">
+    <h2 id="noteDlgTitle">New note</h2>
+    <p>Markdown, and as many images as you like — paste one straight in, drop it on the box,
+       or pick a file. Kept in this browser with everything else.</p>
+  </div>
+  <form class="dlg-body" id="noteForm">
+    <label class="field-label" for="noteTitle">Title <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+    <input class="input" id="noteTitle" type="text" autocomplete="off" placeholder="Taken from the first line if left blank">
+    <label class="field-label" for="noteBody">Note</label>
+    <textarea class="input note-input" id="noteBody" spellcheck="true"
+              placeholder="Anything worth keeping.&#10;&#10;## A heading, if you like&#10;- a list&#10;- **bold**, `code`, [a link](https://example.com)"></textarea>
+    <div class="note-drop" id="noteDrop" hidden>Drop the image here</div>
+    <div class="note-thumbs" id="noteThumbs" hidden role="group" aria-label="Images in this note"></div>
+    <div class="note-tools">
+      <button class="btn tiny" id="noteAddImage" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 16l4.5-4 4 3.5 3.5-3 5 4.5"/><circle cx="9" cy="9.5" r="1.4"/></svg>
+        Add image
+      </button>
+      <span class="note-hint" id="noteHint">⌘V pastes a screenshot right in.</span>
+      <span class="jmeta" id="noteCount"></span>
+    </div>
+    <div class="dlg-err" id="noteErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" id="noteSave" type="submit">Save note</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="jsonDlg" aria-labelledby="jsonDlgTitle">
   <div class="dlg-head">

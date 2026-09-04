@@ -21,6 +21,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const INDEX = resolve(here, '../index.html');
 const ENTRY = resolve(here, '../assets/js/main.js');
 
+const atobNode = (b64) => [...Buffer.from(b64, 'base64')];
+
 let checks = 0, failures = 0;
 const ok = (label, cond, detail) => {
   checks++;
@@ -61,6 +63,23 @@ d.head.appendChild(style);
 window.marked = marked;
 window.DOMPurify = createDOMPurify(window);
 window.hljs = hljs;
+
+/* Blob.text() and Blob.arrayBuffer() have been in every browser since 2019,
+   but jsdom has neither; FileReader, which it does have, is how they were
+   written before that. The library reads a PDF or a workbook this way. */
+const readBlob = (blob, how) => new Promise((res, rej) => {
+  const reader = new window.FileReader();
+  reader.onload = () => res(reader.result);
+  reader.onerror = () => rej(reader.error || new Error('read failed'));
+  if (how === 'text') reader.readAsText(blob);
+  else reader.readAsArrayBuffer(blob);
+});
+if (!window.Blob.prototype.arrayBuffer) {
+  window.Blob.prototype.arrayBuffer = function () { return readBlob(this, 'buffer'); };
+}
+if (!window.Blob.prototype.text) {
+  window.Blob.prototype.text = function () { return readBlob(this, 'text'); };
+}
 
 /* Storage + a few APIs jsdom lacks. */
 window.indexedDB = new fakeIndexedDB.IDBFactory();
@@ -126,7 +145,7 @@ for (const key of [
   'matchMedia', 'getSelection', 'requestAnimationFrame', 'cancelAnimationFrame',
   'getComputedStyle', 'indexedDB', 'IDBKeyRange', 'confirm', 'alert',
   'Node', 'NodeFilter', 'Element', 'HTMLElement', 'Event', 'CustomEvent',
-  'MouseEvent', 'KeyboardEvent', 'PointerEvent', 'Range', 'Blob', 'FileReader',
+  'MouseEvent', 'KeyboardEvent', 'PointerEvent', 'Range', 'Blob', 'File', 'FileReader',
   'marked', 'DOMPurify', 'hljs', 'showSaveFilePicker', 'showDirectoryPicker',
   'XMLSerializer', 'SVGElement',
   'innerWidth', 'innerHeight', 'CSS'
@@ -148,6 +167,16 @@ const qa = (sel) => [...d.querySelectorAll(sel)];
 const click = (elm) => elm.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 const submit = (form) => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 const shownViews = () => qa('.view').filter(v => !v.hidden).map(v => v.id).join(',');
+/* Files arrive through the picker in the browser; the input's list is
+   read-only, so it is defined onto the element the way the harness does
+   elsewhere. This exercises main.js's routing, not just handleFiles. */
+const handleFilesFor = async (files) => {
+  const list = files.slice();
+  list.item = (i) => list[i] || null;
+  Object.defineProperty(q('#fileInput'), 'files', { value: list, configurable: true, writable: true });
+  q('#fileInput').dispatchEvent(new window.Event('change', { bubbles: true }));
+  await wait(120);
+};
 const paste = async (title, text) => {
   click(q('#rPaste'));
   q('#pasteTitle').value = title || '';
@@ -348,6 +377,270 @@ const filesBefore = qa('#recentRows .row-item').length;
 const notesBefore = q('#tabNotesN').textContent;
 ok('nothing written to localStorage', window.localStorage.length === 0 && window.sessionStorage.length === 0);
 ok('documents in the library', filesBefore > 5, filesBefore + ' documents, ' + notesBefore + ' note(s)');
+
+
+/* ===================== other file types ===================== */
+/* The stubs below stand in for pdf.js and SheetJS, which are fetched from a
+   CDN in the browser. Both readers use a library already on the page if there
+   is one, which is exactly what lets these take their place — and lets the
+   test assert that no script tag was added. A "PDF" here is a JSON file
+   describing its own text items, and the stub plays pdf.js reading it. */
+const decode = (bytes) => new TextDecoder().decode(bytes);
+window.pdfjsLib = {
+  GlobalWorkerOptions: {},
+  getDocument: (opts) => ({
+    promise: (async () => {
+      const spec = JSON.parse(decode(opts.data));
+      return {
+        numPages: spec.numPages || spec.pages.length,
+        getPage: async (n) => ({
+          getTextContent: async () => ({ items: spec.pages[n - 1] || [] }),
+          cleanup() {}
+        }),
+        getMetadata: async () => ({ info: spec.info || {} })
+      };
+    })()
+  })
+};
+window.XLSX = {
+  read: (bytes) => JSON.parse(decode(bytes)),
+  utils: { sheet_to_json: (sheet) => sheet }
+};
+globalThis.pdfjsLib = window.pdfjsLib;
+globalThis.XLSX = window.XLSX;
+
+const convert = await import('../assets/js/features/convert/index.js');
+const pdfIn = await import('../assets/js/features/convert/pdf.js');
+const sheetIn = await import('../assets/js/features/convert/sheet.js');
+
+const glyph = (str, x, y, size) => ({
+  str, width: str.length * size * 0.5, height: size, transform: [size, 0, 0, size, x, y]
+});
+const textLine = (text, y, size, x = 72, right = null) =>
+  ({ text, y, size, x, right: right == null ? x + text.length * size * 0.5 : right });
+const asPdf = (spec, name) =>
+  new window.File([JSON.stringify(spec)], name || 'report.pdf', { type: 'application/pdf' });
+const asBook = (sheets, name) =>
+  new window.File([JSON.stringify({ SheetNames: Object.keys(sheets), Sheets: sheets })],
+    name || 'numbers.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+section('file types: which reader a file goes to');
+ok('markdown by extension', convert.sniff('notes.md') === 'markdown' && convert.sniff('a.txt') === 'markdown');
+ok('pdf by extension', convert.sniff('report.pdf') === 'pdf');
+ok('spreadsheets by extension', ['xlsx', 'xls', 'csv', 'tsv', 'ods']
+  .every(e => convert.sniff('book.' + e) === 'sheet'),
+  ['xlsx', 'xls', 'csv', 'tsv', 'ods'].map(e => convert.sniff('b.' + e)).join(','));
+ok('json by extension', convert.sniff('data.json') === 'json');
+ok('the type is the fallback when there is no extension',
+  convert.sniff({ name: 'download', type: 'application/pdf' }) === 'pdf' &&
+  convert.sniff({ name: 'download', type: 'text/csv' }) === 'sheet');
+ok('and anything else is refused', convert.sniff('photo.heic') === 'unknown' &&
+  !convert.canRead('song.mp3'));
+ok('a name keeps its extension but a title does not',
+  convert.baseNameOf('/tmp/Q2 numbers.xlsx') === 'Q2 numbers' &&
+  convert.extensionOf('Q2 numbers.xlsx') === 'xlsx');
+
+section('file types: a PDF is glyphs at coordinates, not lines');
+const oneLine = pdfIn.itemsToLines([
+  glyph('The quick', 72, 700, 11),
+  glyph('brown', 72 + 9 * 5.5 + 4, 700, 11),
+  glyph('Second line', 72, 684, 11)
+]);
+ok('runs on one baseline become one line', oneLine.length === 2, oneLine.length + ' lines');
+ok('a gap between runs becomes the space it stands for',
+  oneLine[0].text === 'The quick brown', JSON.stringify(oneLine[0].text));
+ok('lines come out down the page', oneLine[0].y > oneLine[1].y);
+ok('a line carries the biggest type in it',
+  pdfIn.itemsToLines([glyph('Big', 72, 700, 22), glyph('small', 120, 700, 11)])[0].size === 22);
+
+section('file types: a PDF becomes a document');
+const REPORT = {
+  info: { Title: 'Revenue and the Weather' },
+  pages: [
+    [glyph('Acme Quarterly Report', 72, 780, 9), glyph('Revenue and the Weather', 72, 700, 22),
+     glyph('The quarter opened badly. Rain in April kept foot traffic', 72, 660, 11),
+     glyph('down across every region, and the shortfall was not re-', 72, 644, 11),
+     glyph('covered in May.', 72, 628, 11),
+     glyph('Regional detail', 72, 596, 14),
+     glyph('Each region reported separately.', 72, 572, 11),
+     glyph('Page 1 of 2', 72, 40, 9)],
+    [glyph('Acme Quarterly Report', 72, 780, 9), glyph('What we changed', 72, 700, 14),
+     glyph('• Moved the awnings out earlier', 72, 660, 11),
+     glyph('• Reprinted the April vouchers', 72, 640, 11),
+     glyph('1. Review the forecast weekly', 72, 596, 11),
+     glyph('Page 2 of 2', 72, 40, 9)]
+  ]
+};
+const scriptsBefore = qa('script[src]').length;
+await handleFilesFor([asPdf(REPORT)]);
+await wait(300);
+ok('it opens in the reading view like anything else', shownViews() === 'view-read', shownViews());
+const pdfPane = qa('.pane').find(p => /report\.pdf/.test(p.querySelector('.pane-name').textContent));
+ok('with a pane of its own', !!pdfPane, qa('.pane-name').map(n => n.textContent).join(' / '));
+ok('no library was fetched, because one was already here',
+  qa('script[src]').length === scriptsBefore, qa('script[src]').length + ' vs ' + scriptsBefore);
+ok('the title is a heading', !!pdfPane.querySelector('.md h1') &&
+  pdfPane.querySelector('.md h1').textContent.includes('Revenue and the Weather'),
+  pdfPane.querySelector('.md h1') ? pdfPane.querySelector('.md h1').textContent : 'none');
+ok('a smaller heading is one level down, not three',
+  [...pdfPane.querySelectorAll('.md h2')].some(h => h.textContent.includes('Regional detail')),
+  [...pdfPane.querySelectorAll('.md h1,.md h2,.md h3')].map(h => h.tagName).join(','));
+ok('lines that were one sentence are one paragraph',
+  [...pdfPane.querySelectorAll('.md p')].some(p =>
+    /Rain in April kept foot traffic down across every region/.test(p.textContent)),
+  [...pdfPane.querySelectorAll('.md p')].map(p => p.textContent.slice(0, 30)).join(' | '));
+ok('a word broken across a line end is mended',
+  /shortfall was not recovered in May/.test(pdfPane.textContent));
+ok('the running head and the page numbers are gone',
+  !/Acme Quarterly Report/.test(pdfPane.textContent) && !/Page 1 of 2/.test(pdfPane.textContent));
+ok('bullets are a list', pdfPane.querySelectorAll('.md ul li').length === 2,
+  pdfPane.querySelectorAll('.md ul li').length + ' items');
+ok('a numbered line is an ordered list', pdfPane.querySelectorAll('.md ol li').length === 1);
+ok('blocks are indexed, so notes can point into it',
+  pdfPane.querySelectorAll('.md > [data-b]').length > 4,
+  pdfPane.querySelectorAll('.md > [data-b]').length + ' blocks');
+
+section('file types: a spreadsheet becomes a document');
+await handleFilesFor([asBook({
+  Q2: [['Region', 'Units', 'Revenue'], ['North', '1,204', '$48,160.00'],
+       ['South', '812', '$32,480.00'], ['East | West', '96', '$3,840.00']],
+  Notes: [['Comment'], ['Awnings out earlier']]
+}, 'Q2 numbers.xlsx')]);
+await wait(300);
+const bookPane = qa('.pane').find(p => /Q2 numbers/.test(p.querySelector('.pane-name').textContent));
+ok('it opens as a document too', !!bookPane, qa('.pane-name').map(n => n.textContent).join(' / '));
+ok('the workbook name is the title',
+  bookPane.querySelector('.md h1').textContent.includes('Q2 numbers'),
+  bookPane.querySelector('.md h1').textContent);
+ok('every sheet is a section', qa('.md h2', bookPane).length === 0 ||
+  [...bookPane.querySelectorAll('.md h2')].map(h => h.textContent.trim().replace(/^#/, '')).join(',') === 'Q2,Notes',
+  [...bookPane.querySelectorAll('.md h2')].map(h => h.textContent).join(','));
+ok('each is a real table', bookPane.querySelectorAll('.md table').length === 2,
+  bookPane.querySelectorAll('.md table').length + ' tables');
+ok('with the header row as headers',
+  [...bookPane.querySelectorAll('.md table th')].slice(0, 3).map(th => th.textContent).join(',') === 'Region,Units,Revenue',
+  [...bookPane.querySelectorAll('.md table th')].map(th => th.textContent).join(','));
+ok('numbers are set to the right, where numbers are read',
+  [...bookPane.querySelectorAll('.md table th')][1].getAttribute('align') === 'right' ||
+  /text-align:\s*right/.test([...bookPane.querySelectorAll('.md table th')][1].getAttribute('style') || ''),
+  [...bookPane.querySelectorAll('.md table th')][1].outerHTML.slice(0, 60));
+ok('a pipe in a cell does not break the table',
+  /East \| West/.test(bookPane.textContent) && bookPane.querySelectorAll('.md table')[0].querySelectorAll('tr').length === 4,
+  bookPane.querySelectorAll('.md table')[0].querySelectorAll('tr').length + ' rows');
+ok('tables still get their scroll wrapper', bookPane.querySelectorAll('.table-wrap').length === 2);
+
+section('file types: on Home');
+click(q('#tab-home'));
+await wait(120);
+const pdfRow = qa('#recentRows .row-item').find(li => /report\.pdf/.test(li.textContent));
+const bookRow = qa('#recentRows .row-item').find(li => /Q2 numbers/.test(li.textContent));
+ok('a PDF says it is a PDF, even while it is open',
+  [...pdfRow.querySelectorAll('.kind')].map(k => k.textContent).join(',') === 'PDF,Open',
+  [...pdfRow.querySelectorAll('.kind')].map(k => k.textContent).join(','));
+ok('and a workbook says it is a sheet',
+  [...bookRow.querySelectorAll('.kind')].some(k => k.textContent === 'Sheet'),
+  [...bookRow.querySelectorAll('.kind')].map(k => k.textContent).join(','));
+ok('and how many pages it had', /2 pages/.test(pdfRow.textContent),
+  pdfRow.querySelector('.row-sub').textContent);
+ok('a workbook says how much it held', /2 sheets/.test(bookRow.textContent) && /4 rows/.test(bookRow.textContent),
+  bookRow.querySelector('.row-sub').textContent);
+saved.files.length = 0;
+click(pdfRow.querySelector('.row-act .btn'));
+await wait(150);
+ok('a converted document exports as the Markdown it became',
+  saved.files[0].name === 'report.md' && /^# Revenue and the Weather/.test(saved.files[0].text),
+  saved.files[0].name + ' — ' + saved.files[0].text.slice(0, 30));
+
+section('file types: what cannot be read');
+const libraryWas = qa('#recentRows .row-item').length;
+await handleFilesFor([new window.File(['noise'], 'song.mp3', { type: 'audio/mpeg' })]);
+await wait(150);
+ok('an unreadable file is refused, and says what does work',
+  /can’t read/.test(q('#toast').textContent) && /PDF/.test(q('#toast').textContent),
+  q('#toast').textContent);
+ok('and nothing is added', qa('#recentRows .row-item').length === libraryWas);
+await handleFilesFor([asPdf({ pages: [[glyph(' ', 72, 700, 11)], [glyph('', 72, 700, 11)]] }, 'scan.pdf')]);
+await wait(250);
+ok('a scan with no text in it says so rather than opening blank',
+  /no text in it/.test(q('#toast').textContent), q('#toast').textContent);
+ok('and is not added to the library', qa('#recentRows .row-item').length === libraryWas,
+  qa('#recentRows .row-item').length + ' vs ' + libraryWas);
+await handleFilesFor([asBook({ Blank: [['', ''], ['', '']] }, 'empty.xlsx')]);
+await wait(250);
+ok('an empty workbook says so too', /empty/.test(q('#toast').textContent), q('#toast').textContent);
+
+section('file types: a note from a PDF');
+click(q('#tab-read'));
+await wait(120);
+const pdfBlock = pdfPane.querySelector('.md p');
+const pdfRange = d.createRange();
+pdfRange.setStart(pdfBlock.firstChild, 0);
+pdfRange.setEnd(pdfBlock.firstChild, Math.min(24, pdfBlock.firstChild.nodeValue.length));
+window.getSelection().removeAllRanges();
+window.getSelection().addRange(pdfRange);
+d.dispatchEvent(new window.Event('selectionchange'));
+await wait(160);
+const notesWere = Number(q('#tabNotesN').textContent || '0');
+click(q('#selNote'));
+await wait(200);
+ok('a passage from a PDF saves as a note',
+  Number(q('#tabNotesN').textContent) === notesWere + 1,
+  q('#tabNotesN').textContent);
+ok('and it remembers which document', qa('#notesBody .ngroup .fname')
+  .concat(qa('.ngroup-head .fname'))
+  .some(f => /report\.pdf/.test(f.textContent)) ||
+  (click(q('#tab-notes')), await wait(150), /report\.pdf/.test(q('#notesBody').textContent)),
+  'notes page mentions the file');
+
+section('file types: a PDF over a link');
+const previousFetch2 = window.fetch;
+window.fetch = async (url) => ({
+  ok: true, status: 200,
+  headers: { get: () => 'application/pdf' },
+  arrayBuffer: async () => new TextEncoder().encode(JSON.stringify({
+    info: {}, pages: [[glyph('Downloaded', 72, 700, 20), glyph('From the network.', 72, 660, 11)]]
+  })).buffer,
+  text: async () => ''
+});
+globalThis.fetch = window.fetch;
+click(q('#qUrl'));
+q('#urlField').value = 'https://x.dev/papers/whitepaper.pdf';
+submit(q('#urlForm'));
+await wait(300);
+ok('a linked PDF is downloaded and read',
+  qa('.pane-name').some(n => /whitepaper\.pdf/.test(n.textContent)),
+  qa('.pane-name').map(n => n.textContent).join(' / '));
+ok('and reads as a document', qa('.pane').some(p => /From the network/.test(p.textContent)));
+window.fetch = previousFetch2;
+globalThis.fetch = previousFetch2;
+
+section('file types: the pure conversions');
+ok('one page has no furniture, because nothing can repeat',
+  pdfIn.pageFurniture([[textLine('Title', 780, 9)]]).size === 0);
+ok('the same line at the edge of two pages is furniture',
+  pdfIn.pageFurniture([[textLine('Acme Report', 780, 9)], [textLine('Acme Report', 780, 9)]]).has('acme report'));
+ok('a line that appears once is not',
+  !pdfIn.pageFurniture([[textLine('Acme Report', 780, 9)], [textLine('Something else', 780, 9)]]).has('acme report'));
+ok('numbers are blanked, so "Page 1 of 9" and "Page 2 of 9" are the same furniture',
+  pdfIn.pageFurniture([[textLine('Page 1 of 9', 40, 9)], [textLine('Page 2 of 9', 40, 9)]]).has('page # of #'));
+ok('the body size is the one most of the words are set in',
+  pdfIn.bodySize([[textLine('a'.repeat(400), 700, 11), textLine('Heading', 740, 24)]]) === 11);
+ok('heading levels follow the document, biggest first',
+  pdfIn.headingSizes([[textLine('A', 700, 24), textLine('B', 680, 14), textLine('C', 660, 11)]], 11)
+    .join(',') === '24,14');
+ok('a trailing empty row and column are trimmed away',
+  JSON.stringify(sheetIn.trimGrid([['a', 'b', ''], ['c', '', ''], ['', '', '']])) ===
+  JSON.stringify([['a', 'b'], ['c', '']]),
+  JSON.stringify(sheetIn.trimGrid([['a', 'b', ''], ['c', '', ''], ['', '', '']])));
+ok('a nameless column is given one',
+  /\| Region \| Column 2 \|/.test(sheetIn.gridToMarkdown([['Region', ''], ['North', '5']], 'S').markdown),
+  sheetIn.gridToMarkdown([['Region', ''], ['North', '5']], 'S').markdown.split('\n')[4]);
+ok('a cell holding a newline stays on one row',
+  /one<br>two/.test(sheetIn.gridToMarkdown([['A'], ['one\ntwo']], 'S').markdown));
+const wide = sheetIn.gridToMarkdown([Array.from({ length: 60 }, (_, i) => 'c' + i)]
+  .concat(Array.from({ length: 12 }, () => Array.from({ length: 60 }, () => 'x'))), 'Wide');
+ok('a sheet wider than a table can hold says what it left out',
+  wide.clipped && /of 60 columns/.test(wide.markdown), wide.markdown.split('\n').pop());
 
 
 /* ============================ canvas ============================ */
@@ -1591,6 +1884,237 @@ click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn.danger'));
 await wait(150);
 ok('and can be removed', qa('#jsonRows .row-item').length === jsonTotal - 1,
   qa('#jsonRows .row-item').length + ' rows');
+
+/* ========================= notes you write ========================= */
+/* A real 1x1 PNG, so FileReader produces a genuine data URL. */
+const PNG_BYTES = Uint8Array.from(atobNode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=='));
+const picture = (name) => new window.File([PNG_BYTES], name || 'shot.png', { type: 'image/png' });
+const asFileList = (files) => {
+  const list = files.slice();
+  list.item = (i) => list[i] || null;
+  return list;
+};
+const putFiles = (input, files) => {
+  Object.defineProperty(input, 'files', { value: asFileList(files), configurable: true, writable: true });
+};
+const noteCards = () => qa('#notesBody .note');
+const ownCards = () => qa('#notesBody .ngroup.own .note');
+const writeNote = async (heading, text) => {
+  click(q('#newNote'));
+  await wait(60);
+  q('#noteTitle').value = heading || '';
+  q('#noteBody').value = text;
+  q('#noteBody').dispatchEvent(new window.Event('input', { bubbles: true }));
+  submit(q('#noteForm'));
+  await wait(150);
+};
+
+section('notes: writing one by hand');
+click(q('#tab-notes'));
+await wait(120);
+const cardsBefore = noteCards().length;
+ok('the page offers a way to write one', !!q('#newNote') && !q('#newNote').hidden);
+click(q('#newNote'));
+await wait(80);
+ok('the editor opens', q('#noteDlg').open === true || q('#noteDlg').hasAttribute('open'));
+ok('it is a new note, not an edit', q('#noteDlgTitle').textContent === 'New note',
+  q('#noteDlgTitle').textContent);
+ok('nothing to save yet is refused',
+  (submit(q('#noteForm')), await wait(60), /Nothing written/.test(q('#noteErr').textContent)),
+  q('#noteErr').textContent);
+q('#noteTitle').value = 'Shipping checklist';
+q('#noteBody').value = '## Before Friday\n\n- [x] cut the release\n- [ ] tell support\n\n`npm run check` first.';
+q('#noteBody').dispatchEvent(new window.Event('input', { bubbles: true }));
+submit(q('#noteForm'));
+await wait(200);
+ok('the editor closes on save', !q('#noteDlg').open);
+ok('the note is in the list', noteCards().length === cardsBefore + 1,
+  noteCards().length + ' cards');
+ok('it sits in a group of its own', ownCards().length === 1 &&
+  /Notes of your own/.test(q('#notesBody .ngroup.own .ngroup-head').textContent));
+ok('the title is shown as a title', q('.ngroup.own .note-title').textContent === 'Shipping checklist',
+  q('.ngroup.own .note-title').textContent);
+ok('the body is rendered Markdown, not shown as source',
+  !!q('.ngroup.own .note-body h2') && !!q('.ngroup.own .note-body code'),
+  q('.ngroup.own .note-body').innerHTML.slice(0, 60));
+ok('task lists work here too', qa('.ngroup.own .note-body li.task').length === 2 &&
+  qa('.ngroup.own .note-body li.done').length === 1);
+ok('there is nowhere to jump back to', !q('.ngroup.own .note-meta button.where') &&
+  /Written here/.test(q('.ngroup.own .note-meta').textContent));
+ok('the header counts it', /1 of your own|1 note/.test(q('#notesTotal').textContent),
+  q('#notesTotal').textContent);
+
+section('notes: a title of its own if you leave it blank');
+await writeNote('', '# Borrowed from the first line\n\nThe rest of it.');
+ok('the first line becomes the title',
+  qa('.ngroup.own .note-title').some(h => h.textContent === 'Borrowed from the first line'),
+  qa('.ngroup.own .note-title').map(h => h.textContent).join(' / '));
+ok('newest of your own comes first',
+  qa('.ngroup.own .note-title')[0].textContent === 'Borrowed from the first line');
+
+section('notes: images');
+click(q('#newNote'));
+await wait(80);
+q('#noteTitle').value = 'With a screenshot';
+q('#noteBody').value = 'Look at this:';
+putFiles(q('#noteImageInput'), [picture('screen.png')]);
+q('#noteImageInput').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(220);
+ok('picking an image writes a reference into the note',
+  /!\[screen\.png\]\(folio-img:[\w-]+\)/.test(q('#noteBody').value),
+  JSON.stringify(q('#noteBody').value));
+ok('the reference is short, not a wall of base64', q('#noteBody').value.length < 200,
+  q('#noteBody').value.length + ' characters');
+ok('a thumbnail appears', qa('#noteThumbs .note-thumb').length === 1 && !q('#noteThumbs').hidden);
+ok('the thumbnail is the picture itself',
+  /^data:image\/png;base64,/.test(q('#noteThumbs img').getAttribute('src')),
+  q('#noteThumbs img').getAttribute('src').slice(0, 26));
+ok('the editor counts what is attached', /1 image/.test(q('#noteCount').textContent),
+  q('#noteCount').textContent);
+
+/* A screenshot on the clipboard is the quickest way in. */
+const pasteEvent = new window.Event('paste', { bubbles: true, cancelable: true });
+pasteEvent.clipboardData = { files: asFileList([picture('pasted.png')]), items: [] };
+q('#noteBody').dispatchEvent(pasteEvent);
+await wait(220);
+ok('pasting an image adds it too', qa('#noteThumbs .note-thumb').length === 2,
+  qa('#noteThumbs .note-thumb').length + ' thumbnails');
+ok('and pasting text is left alone', (() => {
+  const plain = new window.Event('paste', { bubbles: true, cancelable: true });
+  plain.clipboardData = { files: asFileList([]), items: [] };
+  q('#noteBody').dispatchEvent(plain);
+  return !plain.defaultPrevented;
+})());
+
+/* Dropping on the dialog must never reach the window's Markdown handler. */
+const docsBefore = qa('#recentRows .row-item').length;
+const dropEvent = new window.Event('drop', { bubbles: true, cancelable: true });
+dropEvent.dataTransfer = { files: asFileList([picture('dropped.png')]) };
+q('#noteDlg').dispatchEvent(dropEvent);
+await wait(240);
+ok('dropping an image on the editor adds it', qa('#noteThumbs .note-thumb').length === 3,
+  qa('#noteThumbs .note-thumb').length + ' thumbnails');
+click(q('#tab-home'));
+await wait(80);
+ok('and it is not read as a document', qa('#recentRows .row-item').length === docsBefore,
+  qa('#recentRows .row-item').length + ' documents');
+click(q('#tab-notes'));
+await wait(80);
+
+click(qa('#noteThumbs .note-thumb-x')[2]);
+await wait(80);
+ok('a thumbnail can be taken back out', qa('#noteThumbs .note-thumb').length === 2 &&
+  !/dropped\.png/.test(q('#noteBody').value), qa('#noteThumbs .note-thumb').length + ' left');
+submit(q('#noteForm'));
+await wait(250);
+const shot = ownCards().find(li => /With a screenshot/.test(li.textContent));
+const shotImages = () => [...shot.querySelectorAll('img')];
+ok('the saved note shows its pictures', shotImages().length === 2, shotImages().length + ' images');
+ok('rendered from the store, as real image data',
+  /^data:image\/png;base64,/.test(shotImages()[0].getAttribute('src')),
+  shotImages()[0].getAttribute('src').slice(0, 26));
+ok('the byline says what it is carrying', /2 images/.test(shot.querySelector('.note-meta').textContent),
+  shot.querySelector('.note-meta').textContent);
+const storedImages = await new Promise((res, rej) => {
+  const req = window.indexedDB.open(DB_NAME, DB_VER);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('images').objectStore('images').getAll();
+    tx.onsuccess = () => res(tx.result);
+    tx.onerror = () => rej(tx.error);
+  };
+  req.onerror = () => rej(req.error);
+});
+ok('images are kept in their own store, not inside the note',
+  storedImages.length === 2 && storedImages.every(r => typeof r.data === 'string'),
+  storedImages.length + ' images');
+ok('and the note holds only references',
+  /folio-img:/.test(appState.ownNotes().find(n => n.title === 'With a screenshot').body) &&
+  !/base64/.test(appState.ownNotes().find(n => n.title === 'With a screenshot').body));
+ok('one dropped before saving was swept up', storedImages.length === 2);
+
+section('notes: images that will not do');
+click(q('#newNote'));
+await wait(80);
+putFiles(q('#noteImageInput'), [new window.File(['# not a picture'], 'notes.md', { type: 'text/markdown' })]);
+q('#noteImageInput').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+ok('a file that is not an image is refused, with the list of what works',
+  /not an image/.test(q('#noteErr').textContent) && /PNG/.test(q('#noteErr').textContent),
+  q('#noteErr').textContent);
+ok('and nothing is written into the note', !/folio-img:/.test(q('#noteBody').value));
+const tooBig = new window.File([new Uint8Array(7 * 1024 * 1024)], 'huge.png', { type: 'image/png' });
+putFiles(q('#noteImageInput'), [tooBig]);
+q('#noteImageInput').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(200);
+ok('one that is too heavy says so, in bytes a person can read',
+  /7\.0 MB/.test(q('#noteErr').textContent) && /6\.0 MB/.test(q('#noteErr').textContent),
+  q('#noteErr').textContent);
+ok('and it is not stored', !/folio-img:/.test(q('#noteBody').value));
+q('#noteDlg').close();
+await wait(120);
+
+section('notes: editing one');
+click(shot.querySelector('.note-acts .btn'));
+await wait(120);
+ok('Edit opens the editor on that note', q('#noteDlgTitle').textContent === 'Edit note',
+  q('#noteDlgTitle').textContent);
+ok('with the note in it', q('#noteTitle').value === 'With a screenshot' &&
+  /folio-img:/.test(q('#noteBody').value));
+ok('and its images in the strip', qa('#noteThumbs .note-thumb').length === 2);
+q('#noteTitle').value = 'With a screenshot, revised';
+submit(q('#noteForm'));
+await wait(220);
+ok('the note is replaced, not duplicated',
+  ownCards().length === 3 &&
+  qa('.ngroup.own .note-title').some(h => h.textContent === 'With a screenshot, revised'),
+  ownCards().length + ' of your own');
+
+section('notes: clamping and export');
+const wordy = ownCards().find(li => /revised/.test(li.textContent));
+ok('a note with pictures offers Expand',
+  [...wordy.querySelectorAll('.note-acts .btn')].some(b => b.textContent === 'Expand'));
+click([...wordy.querySelectorAll('.note-acts .btn')].find(b => b.textContent === 'Expand'));
+await wait(60);
+ok('and expands', wordy.classList.contains('expanded'));
+saved.files.length = 0;
+click([...wordy.querySelectorAll('.note-acts .btn')].find(b => b.textContent === 'Save'));
+await wait(150);
+ok('a written note exports as itself', /^# With a screenshot, revised/.test(saved.files[0].text),
+  saved.files[0].text.slice(0, 40));
+ok('with the pictures inlined, so the file stands alone',
+  /!\[screen\.png\]\(data:image\/png;base64,/.test(saved.files[0].text) &&
+  !/folio-img:/.test(saved.files[0].text));
+click(q('#saveAllNotes'));
+await wait(150);
+ok('and appears in the notes bundle under its own heading',
+  /## Notes of your own/.test(saved.files.at(-1).text) &&
+  /### With a screenshot, revised/.test(saved.files.at(-1).text));
+ok('passage notes are still in there', /## /.test(saved.files.at(-1).text.replace('## Notes of your own', '')));
+
+section('notes: n writes one, and deleting sweeps up');
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'n', bubbles: true }));
+await wait(80);
+ok('n opens the editor on the Notes page', q('#noteDlgTitle').textContent === 'New note');
+q('#noteDlg').close();
+await wait(80);
+const goingAway = ownCards().find(li => /revised/.test(li.textContent));
+click([...goingAway.querySelectorAll('.note-acts .btn')].find(b => b.textContent === 'Delete'));
+await wait(250);
+ok('the note is gone', ownCards().length === 2, ownCards().length + ' of your own');
+const leftOver = await new Promise((res, rej) => {
+  const req = window.indexedDB.open(DB_NAME, DB_VER);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('images').objectStore('images').getAll();
+    tx.onsuccess = () => res(tx.result);
+    tx.onerror = () => rej(tx.error);
+  };
+  req.onerror = () => rej(req.error);
+});
+ok('and its images went with it', leftOver.length === 0, leftOver.length + ' images left');
+ok('passage notes were not touched', qa('#notesBody .ngroup:not(.own) .note').length > 0,
+  qa('#notesBody .ngroup:not(.own) .note').length + ' passage notes');
+
 
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');
 if (consoleErrors.length) {

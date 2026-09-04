@@ -18,6 +18,7 @@ export let notes = [];          // { id, fileId, fileName, quote, blockIndex, he
 export let panes = [];          // { key, fileId, wsId, el, floating, geom }
 export let drawings = [];       // { id, name, shapes, view, createdAt, updatedAt }
 export let jsondocs = [];       // { id, name, text, source, createdAt, updatedAt }
+export let images = [];         // { id, name, type, size, data, createdAt } — for notes
 
 export async function loadPrefs() {
   try {
@@ -43,6 +44,7 @@ export function setWorkspaces(next) { workspaces = next; }
 export function setActiveWs(next) { activeWs = next; }
 export function setDrawings(next) { drawings = next; }
 export function setJsonDocs(next) { jsondocs = next; }
+export function setImages(next) { images = next; }
 
 /* ---------- Selectors: the only way other modules ask questions ---------- */
 export function fileById(id) { return files.find(f => f.id === id) || null; }
@@ -60,6 +62,12 @@ export function drawingById(id) { return drawings.find(dr => dr.id === id) || nu
 export function drawingsByRecency() {
   return drawings.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
+
+export function imageById(id) { return images.find(im => im.id === id) || null; }
+
+/** Notes you wrote yourself, newest first; the rest belong to a document. */
+export function ownNotes() { return notes.filter(n => n.kind === 'manual'); }
+export function filedNotes() { return notes.filter(n => n.kind !== 'manual'); }
 
 export function jsonDocById(id) { return jsondocs.find(j => j.id === id) || null; }
 export function jsonDocsByRecency() {

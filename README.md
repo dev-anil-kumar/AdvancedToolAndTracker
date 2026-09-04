@@ -1,9 +1,10 @@
 # Folio
 
-A quiet, local-first reader for Markdown and JSON. Open documents from your disk or a
-public URL, read several side by side, keep notes from anything you select, sketch a
-diagram, and pick apart a JSON dump — including the JSON that arrives stuffed inside a
-string. Everything is stored in your browser — no accounts, no server, no telemetry.
+A quiet, local-first reader for Markdown, PDF, spreadsheets and JSON. Open documents
+from your disk or a public URL, read several side by side, keep notes from anything you
+select, sketch a diagram, and pick apart a JSON dump — including the JSON that arrives
+stuffed inside a string. Everything is stored in your browser — no accounts, no server,
+no telemetry.
 
 Static files only: **no build step, no bundler, no framework.** Deploys to GitHub Pages
 by pushing.
@@ -40,7 +41,7 @@ Optional, and only needed for development:
 
 ```bash
 npm install
-npm test      # integration smoke test: 344 assertions through the real module graph
+npm test      # integration smoke test: 456 assertions through the real module graph
 npm run lint  # ESLint; no-undef is what catches a missing import with no bundler
 ```
 
@@ -69,12 +70,13 @@ assets/
     core/                   dom · bus · config · db · state · router · format · toast
     md/renderer.js          marked → DOMPurify → highlight.js → enhancements
     features/               theme · highlight · library · workspaces · panes ·
-                            pane-resize · notes · exporter · focus · drawings ·
-                            jsondocs
+                            pane-resize · notes · note-images · exporter ·
+                            focus · drawings · jsondocs
+    features/convert/       loader · pdf · sheet — other formats, into Markdown
     features/canvas/        model · editor
     features/json/          model · tree · table · graph · code
-    ui/                     shell · home · notes-view · dialogs · canvas-view ·
-                            json-view
+    ui/                     shell · home · notes-view · note-editor · dialogs ·
+                            canvas-view · json-view
 ```
 
 ### The one rule
@@ -122,7 +124,7 @@ changed an array. Questions are asked through selectors (`fileById`, `panesIn`,
 
 ### Storage
 
-IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings` / `jsondocs`), wrapped in `core/db.js` with
+IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings` / `jsondocs` / `images`), wrapped in `core/db.js` with
 an in-memory fallback so a browser that blocks storage degrades to session-only
 instead of breaking. Writes go through `persist()`, which never rejects — it warns
 once and carries on. Nothing uses `localStorage`.
@@ -135,14 +137,23 @@ network request the app makes on its own.
 
 ### Dependencies
 
-Four, all pinned, all from a CDN, all loaded by `index.html`:
+All pinned, all from a CDN. The first four are loaded by `index.html`; the last two are
+fetched the first time a file needs them:
 
-| Library | Version | Why |
-| --- | --- | --- |
-| marked | 12.0.2 | GFM parsing |
-| DOMPurify | 3.1.6 | Sanitising rendered HTML |
-| highlight.js | 11.9.0 | Fenced code, dark in both themes |
-| Google Fonts | — | Source Serif 4 and Inter |
+| Library | Version | Why | Loaded |
+| --- | --- | --- | --- |
+| marked | 12.0.2 | GFM parsing | always |
+| DOMPurify | 3.1.6 | Sanitising rendered HTML | always |
+| highlight.js | 11.9.0 | Fenced code, dark in both themes | always |
+| Google Fonts | — | Source Serif 4 and Inter | always |
+| pdf.js | 3.11.174 | Reading the text out of a PDF | on demand |
+| SheetJS | 0.18.5 | Reading a workbook | on demand |
+
+Those last two are together some ten times the size of Folio, and most sessions never
+open a PDF or a spreadsheet, so loading them up front would make every visit pay for a
+feature most visits do not use. `features/convert/loader.js` appends the script the first
+time one is needed and caches the promise; a library already on the page is used as it
+stands, which is also what lets the tests supply their own.
 
 The JSON view adds no dependencies: its parser is `JSON.parse`, and its colouring is a
 tokeniser in `features/json/model.js`. highlight.js would have done the job, except that
@@ -154,14 +165,55 @@ distinction a reader of unfamiliar data needs.
 - **Sources** — local files (picker or drop anywhere), any public URL that allows
   cross-origin reads (GitHub `/blob/` links are converted to raw automatically), or
   pasted text saved to the library like anything else.
+- **File types** — `.md` and `.txt` are read as they are. A **PDF** or a **spreadsheet**
+  (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.csv`, `.tsv`, `.ods`) is converted to Markdown on
+  the way in, so from that point on it *is* a document: it opens in a pane, sits beside
+  other documents, takes notes with block indices, searches, exports and reads in focus
+  mode without one line of the reading view knowing that PDFs exist. A `.json` goes to
+  the JSON view instead. Anything else is refused by name, with a list of what works.
+  - **PDF** — a PDF has no paragraphs; it has glyphs at coordinates. Runs on one baseline
+    become a line, a gap wider than a fraction of the type size becomes the space it
+    stands for, and lines are then joined into prose: a word broken across a line end is
+    mended, a short line that ends a sentence ends the paragraph, a fresh indent starts
+    one. Heading levels come from the document's own ranking of type sizes rather than
+    fixed ratios, so a report set in 22pt and 14pt gets an `h1` and an `h2` — not an `h1`
+    and an `h3`. Running heads and page numbers that repeat across pages are dropped
+    (digits are blanked first, so "Page 3 of 12" and "Page 4 of 12" count as the same
+    furniture). Bullets and numbered lines become lists. What it gives up is layout and
+    images: for a document you mean to *read*, that is the right trade; for one you need
+    to see exactly, it is not. A scan with no text layer says so rather than opening
+    blank.
+  - **Spreadsheets** — every sheet becomes a Markdown table with the row and column
+    count above it. The header row is used as headers, nameless columns are given names,
+    columns that are mostly numbers are set to the right, a `|` in a cell is escaped and
+    a newline in one becomes a `<br>`, and trailing empty rows and columns are trimmed.
+    Formulas arrive as their values, dates as the sheet formatted them. Very large sheets
+    are clipped, and say by how much.
+  - Converted documents store the Markdown they became, not the original bytes — the
+    file on your disk is still the original. Exporting one writes the Markdown, named
+    after the file rather than after the format (`report.pdf` → `report.md`).
 - **Reading tabs** — independent sets of open documents; the same document can be open
   in more than one tab.
 - **Panes** — laid out as rows of *N* (configurable, 1–6). Drag any divider to resize,
   in either axis, with arrow-key support. Drag a title bar to float a document into a
   freely resizable window, and dock it back.
-- **Notes** — select a passage and save it. A note remembers its document, block, and
-  section; clicking it reopens the document at that spot with the quote highlighted in
-  a colour you choose.
+- **Notes** — two kinds, kept in one list.
+  - **Keep a passage.** Select text in the reading view and save it. The note remembers
+    its document, block, and section; clicking it reopens the document at that spot with
+    the quote highlighted in a colour you choose.
+  - **Write one yourself.** *New note* on the Notes page (or <kbd>n</kbd> there, or
+    *Write a note* on Home) opens an editor: a title and a Markdown body, rendered by the
+    same pipeline as a document — headings, lists, task lists, code, tables and all.
+    These belong to no document, so they sit in a group of their own at the top.
+  - **Images.** Paste a screenshot straight into the editor, drop one on it, or pick a
+    file. Pictures are stored in their own IndexedDB store and the note refers to them —
+    `![Shot](folio-img:9f2c…)` — so the note's text stays short enough to edit by hand
+    and the Notes page is not re-parsing megabytes of base64 on every draw. The
+    references are resolved to the real image just before the Markdown is parsed. A
+    thumbnail strip shows what is attached, and taking one out removes it from the text.
+    Deleting a note deletes the pictures nothing else refers to.
+  - **Export** writes a written note as itself, with the images inlined as data URLs, so
+    the `.md` file stands alone with no folder of pictures to lose.
 - **Focus mode** — hides every piece of chrome. Escape returns.
 - **Export** — any document, any note, or everything, written into a folder you pick
   via the File System Access API, falling back to ordinary downloads elsewhere.

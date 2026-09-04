@@ -21,12 +21,13 @@ import { $ } from './core/dom.js';
 import { dbAll } from './core/db.js';
 import { hashView, route } from './core/router.js';
 import {
-  loadPrefs, setActiveWs, setDrawings, setFiles, setJsonDocs, setNotes, workspaces
+  loadPrefs, setActiveWs, setDrawings, setFiles, setImages, setJsonDocs, setNotes, workspaces
 } from './core/state.js';
 
 import { applyTheme, toggleTheme } from './features/theme.js';
 import { applyHighlight } from './features/highlight.js';
 import { handleFiles, openSample } from './features/library.js';
+import { sniff } from './features/convert/index.js';
 import { addWorkspace, selectWorkspace } from './features/workspaces.js';
 import { closeAllPanes } from './features/panes.js';
 import { isZen, setZen } from './features/focus.js';
@@ -34,6 +35,7 @@ import { isZen, setZen } from './features/focus.js';
 import { initShell } from './ui/shell.js';
 import { renderHome, toggleShowAll } from './ui/home.js';
 import { renderNotes } from './ui/notes-view.js';
+import { openNoteEditor } from './ui/note-editor.js';
 import { promptPaste, promptUrl } from './ui/dialogs.js';
 import { pickDrawingFile, renderDrawings } from './ui/canvas-view.js';
 import { openJsonFiles, renderJsonDocs } from './ui/json-view.js';
@@ -54,6 +56,7 @@ $('#qSample').addEventListener('click', openSample);
 $('#rCloseAll').addEventListener('click', closeAllPanes);
 $('#wsAdd').addEventListener('click', () => { addWorkspace(); route('read'); });
 $('#viewAllNotes').addEventListener('click', () => route('notes'));
+$('#qNote').addEventListener('click', () => openNoteEditor());
 $('#showAllFiles').addEventListener('click', toggleShowAll);
 $('#importDrawing').addEventListener('click', pickDrawingFile);
 $('#themeBtn').addEventListener('click', toggleTheme);
@@ -70,11 +73,12 @@ addEventListener('drop', e => {
   dragDepth = 0;
   const dropped = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
   if (!dropped.length) return;
-  /* Sort by what the file is: JSON opens in the JSON view, the rest are read
-     as Markdown. A drawing dropped on the canvas never reaches here — that
-     handler stops it. */
-  const json = dropped.filter(f => /\.(json|jsonc|geojson|ndjson)$/i.test(f.name));
-  const docs = dropped.filter(f => !json.includes(f));
+  /* Sort by what each file is: JSON opens in the JSON view, everything else
+     goes to the library, which converts a PDF or a spreadsheet on the way in.
+     A drawing dropped on the canvas never reaches here — that handler stops
+     it, as does an image dropped on the note editor. */
+  const json = dropped.filter(f => sniff(f) === 'json');
+  const docs = dropped.filter(f => sniff(f) !== 'json');
   if (json.length) openJsonFiles(json);
   if (docs.length) handleFiles(docs);
 });
@@ -85,13 +89,14 @@ addEventListener('drop', e => {
   initShell();
 
   try {
-    const [f, n, dr, js] = await Promise.all([
-      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs')
+    const [f, n, dr, js, im] = await Promise.all([
+      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images')
     ]);
     setFiles(f || []);
     setNotes((n || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     setDrawings(dr || []);
     setJsonDocs(js || []);
+    setImages(im || []);
   } catch (err) {
     console.warn('Folio: could not read saved data', err);
   }

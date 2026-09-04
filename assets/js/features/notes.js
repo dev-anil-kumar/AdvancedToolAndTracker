@@ -1,19 +1,29 @@
 /**
- * Notes: select a passage, keep it, come back to it.
+ * Notes. There are two kinds, and they are kept in one list.
  *
- * A note records the quote, the document, the index of the top-level block it
- * started in, and the nearest heading. Jumping back prefers the block index,
- * falls back to the heading, and highlights the quote itself when it can be
- * found inside a single text node.
+ * A *passage* note comes from a selection: it records the quote, the document,
+ * the index of the top-level block it started in, and the nearest heading.
+ * Jumping back prefers the block index, falls back to the heading, and
+ * highlights the quote itself when it can be found inside a single text node.
+ *
+ * A note *of your own* is written here rather than taken from anything, so it
+ * has a title and a Markdown body — with images, which live in their own store
+ * (see note-images.js). It belongs to no document and has nowhere to jump to.
+ *
+ * `kind` tells them apart. Notes saved before there were two kinds have no
+ * `kind` at all, which reads as a passage note — so nothing has to be migrated.
  */
 import { emit, EVENTS } from '../core/bus.js';
-import { NOTE_QUOTE_MAX } from '../core/config.js';
+import { NOTE_BODY_MAX, NOTE_QUOTE_MAX } from '../core/config.js';
 import { dbDel, dbPut, persist } from '../core/db.js';
 import { $, cssEscape, el, uid } from '../core/dom.js';
 import { route } from '../core/router.js';
-import { anyPaneFor, fileById, notes, setNotes } from '../core/state.js';
+import { anyPaneFor, fileById, noteById, notes, setNotes } from '../core/state.js';
 import { toast } from '../core/toast.js';
+import { pruneImages, refsIn } from './note-images.js';
 import { openDoc, scrollPaneTo, syncPaneHead } from './panes.js';
+
+export const isOwnNote = (note) => !!note && note.kind === 'manual';
 
 export function selectionInfo() {
   const sel = getSelection();
@@ -125,12 +135,57 @@ export async function saveSelectionAsNote() {
   toast('Note saved.', { label: 'View notes', run: () => route('notes') });
 }
 
+/* ---------- Notes you write yourself ---------- */
+
+/** The first line of the body, for a note saved without a title. */
+export function deriveNoteTitle(body) {
+  const line = String(body || '').split('\n').map(l => l.trim()).find(Boolean) || '';
+  return line.replace(/^#{1,6}\s*/, '').replace(/[*_`>[\]]/g, '').trim().slice(0, 90) || 'Untitled note';
+}
+
+/**
+ * Save a note of your own. With an `id` it replaces that note, so the editor
+ * uses one call for both writing and rewriting.
+ */
+export async function saveOwnNote(input) {
+  const body = String(input.body == null ? '' : input.body).slice(0, NOTE_BODY_MAX);
+  const title = String(input.title || '').trim().slice(0, 120) || deriveNoteTitle(body);
+  const existing = input.id ? noteById(input.id) : null;
+  const now = Date.now();
+
+  const note = {
+    id: existing ? existing.id : uid(),
+    kind: 'manual',
+    title,
+    body,
+    fileId: null,
+    fileName: '',
+    quote: '',
+    blockIndex: null,
+    headingId: '',
+    headingText: '',
+    createdAt: existing ? existing.createdAt : now,
+    updatedAt: now
+  };
+
+  if (existing) setNotes(notes.map(n => (n.id === note.id ? note : n)));
+  else setNotes([note].concat(notes));
+  await persist(dbPut('notes', note));
+  /* Pictures the editor added and then took out again have no owner now. */
+  await pruneImages(refsIn(body));
+  emit(EVENTS.NOTES);
+  toast(existing ? 'Note updated.' : 'Note saved.', { label: 'View notes', run: () => route('notes') });
+  return note;
+}
+
 export async function deleteNote(id) {
   const note = notes.find(n => n.id === id);
   if (!note) return;
+  if (isOwnNote(note) && !confirm('Delete “' + note.title + '”? This cannot be undone.')) return;
   setNotes(notes.filter(n => n.id !== id));
   await persist(dbDel('notes', id));
-  syncPaneHead(note.fileId);
+  if (note.fileId) syncPaneHead(note.fileId);
+  if (isOwnNote(note)) await pruneImages();
   emit(EVENTS.NOTES);
   toast('Note deleted.');
 }
@@ -138,7 +193,7 @@ export async function deleteNote(id) {
 /* ---------- Jump from a note back to its place in the document ---------- */
 export function jumpToNote(id) {
   const note = notes.find(n => n.id === id);
-  if (!note) return;
+  if (!note || isOwnNote(note)) return;
   const existing = anyPaneFor(note.fileId);
   const pane = openDoc(note.fileId, existing ? existing.wsId : null);
   if (!pane) return;
