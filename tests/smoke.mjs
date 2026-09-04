@@ -394,7 +394,7 @@ const setText = async (value) => {
 };
 let canvasScene = () => ({ shapes: [] });
 
-const { DB_NAME, DB_VER } = await import('../assets/js/core/config.js');
+const { DB_NAME, DB_VER, GRAPH_CHAR_W, GRAPH_NODE_W } = await import('../assets/js/core/config.js');
 const appState = await import('../assets/js/core/state.js');
 const jsonDocsNow = () => appState.jsonDocsByRecency();
 const editor0 = await import('../assets/js/features/canvas/editor.js');
@@ -1197,10 +1197,28 @@ ok('a parent sits centred on its children', (() => {
 })());
 ok('depth decides the column', Number(gbox('device').dataset.depth) === 1 &&
   Number(gbox('id').dataset.depth) === 2);
-ok('a name too long for the box is cut, with the whole of it in a tooltip',
-  gkey('servercall_sync_failed_count').endsWith('…') &&
+ok('the whole label is in a tooltip, however much of it the box could show',
   gbox('servercall_sync_failed_count').querySelector('title').textContent === 'servercall_sync_failed_count: 1569',
-  gkey('servercall_sync_failed_count') + ' / ' + gbox('servercall_sync_failed_count').querySelector('title').textContent);
+  gbox('servercall_sync_failed_count').querySelector('title').textContent);
+
+/* The labels are monospace and cut to a budget, so this is decidable: the
+   name's last character must end before the value's first one begins. */
+const collisions = () => gboxes().filter(g => {
+  const k = g.querySelector('.jg-key'), v = g.querySelector('.jg-val');
+  if (!k || !v) return false;
+  const keyEnds = Number(k.getAttribute('x')) + k.textContent.length * GRAPH_CHAR_W;
+  const valStarts = Number(v.getAttribute('x')) - v.textContent.length * GRAPH_CHAR_W;
+  return keyEnds > valStarts;
+}).map(g => g.querySelector('title').textContent);
+const overflows = () => gboxes().filter(g => {
+  const k = g.querySelector('.jg-key'), v = g.querySelector('.jg-val');
+  if (!k || !v) return false;
+  return Number(k.getAttribute('x')) + k.textContent.length * GRAPH_CHAR_W > GRAPH_NODE_W ||
+    Number(v.getAttribute('x')) - v.textContent.length * GRAPH_CHAR_W < 0;
+}).map(g => g.querySelector('title').textContent);
+ok('a name and its value never run into each other', collisions().length === 0,
+  collisions().slice(0, 2).join(' / '));
+ok('and neither runs out of its box', overflows().length === 0, overflows().slice(0, 2).join(' / '));
 
 section('json: graph — opening and closing');
 ok('the top level and one below it arrive open', gsign('device') === '−' && !!gbox('battery'),
@@ -1225,6 +1243,8 @@ click(q('#jExpand'));
 await wait(200);
 ok('expand draws the whole shape', gboxes().length > 60, gboxes().length + ' boxes');
 ok('the status line counts the boxes', /box/.test(q('#jStats').textContent), q('#jStats').textContent);
+ok('labels stay apart across every box in the document', collisions().length === 0,
+  gboxes().length + ' boxes; ' + collisions().slice(0, 2).join(' / '));
 const enterKey = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
 gbox('device').dispatchEvent(enterKey);
 await wait(120);
@@ -1252,6 +1272,39 @@ q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(280);
 ok('clearing it brings the map back', gboxes().length > 12, gboxes().length + ' boxes');
 
+section('json: graph — panning');
+click(q('#jFit'));
+await wait(120);
+const beforePan = viewBox();
+const panPointer = (type, x, y, target) => {
+  const ev = new window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+  ev.pointerId = 7;
+  (target || q('#jGraphHost')).dispatchEvent(ev);
+};
+panPointer('pointerdown', 600, 300);
+panPointer('pointermove', 500, 240);
+await wait(60);
+panPointer('pointerup', 500, 240);
+const afterPan = viewBox();
+ok('dragging the background moves the view', afterPan[0] > beforePan[0] && afterPan[1] > beforePan[1],
+  beforePan.slice(0, 2).map(Math.round).join(',') + ' → ' + afterPan.slice(0, 2).map(Math.round).join(','));
+ok('and it moves by what the pointer moved, not more or less',
+  Math.abs((afterPan[0] - beforePan[0]) / (afterPan[1] - beforePan[1]) - (100 / 60)) < 0.05,
+  ((afterPan[0] - beforePan[0]) / (afterPan[1] - beforePan[1])).toFixed(3) + ' vs ' + (100 / 60).toFixed(3));
+ok('the dot grid travels with it, rather than staying put',
+  Number(q('.jg-ground').getAttribute('x')) < afterPan[0] &&
+  Number(q('.jg-ground').getAttribute('width')) > afterPan[2],
+  q('.jg-ground').getAttribute('x') + ' w=' + q('.jg-ground').getAttribute('width'));
+const heldStill = viewBox();
+panPointer('pointerdown', 0, 0, gboxes()[0]);
+panPointer('pointermove', 200, 200);
+await wait(60);
+panPointer('pointerup', 200, 200);
+ok('dragging from a box does not pan — the box owns that gesture',
+  viewBox().join(',') === heldStill.join(','), viewBox().slice(0, 2).map(Math.round).join(','));
+click(q('#jFit'));
+await wait(100);
+
 section('json: graph — a wide array');
 await pasteJson('Wide', JSON.stringify(Array.from({ length: 40 }, (_, i) => ({ n: i }))));
 jsonMode('graph');
@@ -1265,6 +1318,27 @@ click(q('#jGraphHost .jg-node.more'));
 await wait(200);
 ok('and draws them when asked', gboxes().length > wideBefore,
   wideBefore + ' → ' + gboxes().length + ' boxes');
+
+/* Long names against long values is the case that used to overlap. */
+await pasteJson('Long labels', JSON.stringify({
+  servercall_sync_failed_count: 1569,
+  creationTimeMillis: 1788331653724,
+  sanitizedCustomerNumber: '+919109417107',
+  callStartTime: 'Sep 2, 2026 17:23:41',
+  a: 'x',
+  deeply_nested_configuration_key_name: 'a value that is also far too long to fit'
+}));
+jsonMode('graph');
+await wait(250);
+click(q('#jExpand'));
+await wait(200);
+ok('long names beside long values still do not overlap', collisions().length === 0,
+  collisions().join(' / '));
+ok('a value that fits is shown whole rather than cut to a share',
+  gbox('creationTimeMillis').querySelector('.jg-val').textContent === '1788331653724',
+  gbox('creationTimeMillis').querySelector('.jg-val').textContent);
+ok('a short name leaves the rest to the value',
+  gbox('a').querySelector('.jg-key').textContent === 'a', gbox('a').querySelector('.jg-key').textContent);
 
 section('json: graph — back to the tree');
 const gTarget = gbox(0) || gboxes()[1];
@@ -1425,15 +1499,18 @@ jsonMode('tree');
 await wait(100);
 
 section('json: a second document');
+const libraryBefore = jsonDocsNow().length;
 await pasteJson('Deploys', '[{"env":"prod","ok":true},{"env":"staging","ok":false}]');
-ok('the pasted document joins the library', jsonDocsNow().length === 3, jsonDocsNow().length + ' documents');
+ok('the pasted document joins the library', jsonDocsNow().length === libraryBefore + 1,
+  jsonDocsNow().length + ' documents');
 ok('the pasted one is on screen', q('#jName').value === 'Deploys', q('#jName').value);
 ok('an array root tabulates straight away',
   (jsonMode('table'), await wait(150), qa('#jTableHost tbody tr').length) === 2,
   qa('#jTableHost tbody tr').length + ' rows');
 
 await pasteJson('Broken', '{"nope"');
-ok('an invalid paste is still kept', jsonDocsNow().length === 4, jsonDocsNow().length + ' documents');
+ok('an invalid paste is still kept', jsonDocsNow().length === libraryBefore + 2,
+  jsonDocsNow().length + ' documents');
 ok('and opens in the source pane', q('#jModes button[data-mode="edit"]').getAttribute('aria-pressed') === 'true');
 ok('with the reason', /Invalid JSON/.test(q('#jError').textContent), q('#jError').textContent.slice(0, 60));
 jsonMode('tree');
@@ -1487,10 +1564,13 @@ globalThis.fetch = previousFetch;
 section('json: home and persistence');
 click(q('#tab-home'));
 await wait(120);
-ok('the JSON section lists them', qa('#jsonRows .row-item').length === 5,
-  qa('#jsonRows .row-item').length + ' rows');
+/* Counted against the library rather than a number typed here, so adding a
+   document to a test above cannot make this fail for the wrong reason. */
+const jsonTotal = jsonDocsNow().length;
+ok('the JSON section lists every document', qa('#jsonRows .row-item').length === jsonTotal,
+  qa('#jsonRows .row-item').length + ' rows for ' + jsonTotal + ' documents');
 ok('an invalid document is labelled', /invalid/.test(q('#jsonRows').textContent));
-ok('the tab badge follows', q('#tabJsonN').textContent === '5', q('#tabJsonN').textContent);
+ok('the tab badge follows', q('#tabJsonN').textContent === String(jsonTotal), q('#tabJsonN').textContent);
 saved.files.length = 0;
 click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn'));
 await wait(120);
@@ -1505,11 +1585,11 @@ const storedJson = await new Promise((res, rej) => {
   };
   req.onerror = () => rej(req.error);
 });
-ok('documents are in IndexedDB', storedJson.length === 5 && storedJson.every(r => typeof r.text === 'string'),
-  storedJson.length + ' records');
+ok('documents are in IndexedDB', storedJson.length === jsonTotal &&
+  storedJson.every(r => typeof r.text === 'string'), storedJson.length + ' records');
 click(qa('#jsonRows .row-item')[0].querySelector('.row-act .btn.danger'));
 await wait(150);
-ok('and can be removed', qa('#jsonRows .row-item').length === 4,
+ok('and can be removed', qa('#jsonRows .row-item').length === jsonTotal - 1,
   qa('#jsonRows .row-item').length + ' rows');
 
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');

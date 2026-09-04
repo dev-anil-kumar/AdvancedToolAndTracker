@@ -16,7 +16,8 @@
  * drawing fits whatever space it is given without having to measure anything.
  */
 import {
-  GRAPH_FANOUT, GRAPH_GAP_X, GRAPH_GAP_Y, GRAPH_MAX_NODES, GRAPH_NODE_H, GRAPH_NODE_W,
+  GRAPH_CHAR_W, GRAPH_DOTS, GRAPH_FANOUT, GRAPH_GAP_X, GRAPH_GAP_Y, GRAPH_KEY_MIN,
+  GRAPH_MAX_NODES, GRAPH_NODE_H, GRAPH_NODE_W, GRAPH_VAL_MIN, GRAPH_VAL_SHARE,
   GRAPH_ZOOM_MAX, GRAPH_ZOOM_MIN
 } from '../../core/config.js';
 import { clamp } from '../../core/dom.js';
@@ -31,10 +32,31 @@ const svgEl = (tag, attrs) => {
   return node;
 };
 const PAD = 26;
-/* Characters that fit, at the 11px monospace the labels are drawn in. */
-const KEY_CHARS = 17;
-const VAL_CHARS = 18;
+const TEXT_X = 24;              // clear of the type dot
 const cut = (text, max) => (text.length > max ? text.slice(0, max - 1) + '…' : text);
+
+/**
+ * How much of the name and how much of the value fit side by side in one box.
+ *
+ * The labels are monospace, so the width of a string is its length times a
+ * fixed advance — no measuring, and no layout pass. GRAPH_CHAR_W is an upper
+ * bound on that advance, which is what makes this safe: the two strings are
+ * cut to a budget that cannot exceed the space between them, so they can never
+ * run into each other.
+ *
+ * The value gets first call on a little over half, then the name takes what is
+ * left, then any slack the name did not use goes back to the value. That keeps
+ * a number whole ("1788331653724") without shortening a name to nothing.
+ */
+function labelBudget(text, value, hasTwisty) {
+  const room = Math.floor((GRAPH_NODE_W - TEXT_X - (hasTwisty ? 30 : 12)) / GRAPH_CHAR_W);
+  const budget = room - 1;                     // a character of daylight between them
+  if (text.length + value.length <= budget) return { key: text.length, val: value.length };
+  const share = Math.max(GRAPH_VAL_MIN, Math.floor(budget * GRAPH_VAL_SHARE));
+  const val = Math.min(value.length, share);
+  const key = Math.max(GRAPH_KEY_MIN, Math.min(text.length, budget - val));
+  return { key, val: Math.max(GRAPH_VAL_MIN, Math.min(value.length, budget - key)) };
+}
 
 export function createGraph(opts) {
   const host = opts.host;
@@ -51,6 +73,8 @@ export function createGraph(opts) {
   let zoom = 1;
   let centre = { x: 0, y: 0 };
   let svg = null;
+  let ground = null;              // the dot grid, which must cover whatever is on screen
+  let frame = 0;                  // a pending animation frame during a gesture
 
   const shownFor = (key) => fanout.get(key) || GRAPH_FANOUT;
   const visible = (item) => !keep || keep.has(pathKey(item.segments));
@@ -136,9 +160,18 @@ export function createGraph(opts) {
     });
     host.appendChild(svg);
 
+    /* The dots belong to the drawing, not to the panel behind it: a grid that
+       stays put while the boxes move makes a drag feel like it is slipping. */
+    const defs = svgEl('defs');
+    const pattern = svgEl('pattern', {
+      id: 'jg-dots', width: GRAPH_DOTS, height: GRAPH_DOTS, patternUnits: 'userSpaceOnUse'
+    });
+    pattern.appendChild(svgEl('circle', { class: 'jg-dot-mark', cx: 1, cy: 1, r: 1 }));
+    defs.appendChild(pattern);
+    ground = svgEl('rect', { class: 'jg-ground', fill: 'url(#jg-dots)' });
     const linkLayer = svgEl('g', { class: 'jg-links' });
     const nodeLayer = svgEl('g', { class: 'jg-nodes' });
-    svg.append(linkLayer, nodeLayer);
+    svg.append(defs, ground, linkLayer, nodeLayer);
 
     drawn.links.forEach(link => linkLayer.appendChild(linkPath(link)));
     drawn.nodes.forEach(rec => nodeLayer.appendChild(rec.more ? moreNode(rec) : nodeGroup(rec)));
@@ -181,21 +214,27 @@ export function createGraph(opts) {
     }));
     g.appendChild(svgEl('circle', { class: 'jg-dot', cx: 13, cy: GRAPH_NODE_H / 2, r: 3.5 }));
 
-    const key = svgEl('text', { class: 'jg-key', x: 24, y: GRAPH_NODE_H / 2 + 4 });
-    key.textContent = cut(rec.depth === 0 ? '$' : String(item.key), KEY_CHARS);
+    const keyText = rec.depth === 0 ? '$' : String(item.key);
+    const valText = valueText(rec);
+    const fits = labelBudget(keyText, valText, rec.expandable);
+
+    const key = svgEl('text', { class: 'jg-key', x: TEXT_X, y: GRAPH_NODE_H / 2 + 4 });
+    key.textContent = cut(keyText, fits.key);
     g.appendChild(key);
 
-    const right = rec.expandable ? GRAPH_NODE_W - 26 : GRAPH_NODE_W - 10;
-    const value = svgEl('text', { class: 'jg-val', x: right, y: GRAPH_NODE_H / 2 + 4, 'text-anchor': 'end' });
-    value.textContent = cut(valueText(rec), VAL_CHARS);
+    const value = svgEl('text', {
+      class: 'jg-val', x: GRAPH_NODE_W - (rec.expandable ? 30 : 12),
+      y: GRAPH_NODE_H / 2 + 4, 'text-anchor': 'end'
+    });
+    value.textContent = cut(valText, fits.val);
     g.appendChild(value);
 
     if (rec.expandable) {
       g.appendChild(svgEl('circle', {
-        class: 'jg-twist', cx: GRAPH_NODE_W - 14, cy: GRAPH_NODE_H / 2, r: 8
+        class: 'jg-twist', cx: GRAPH_NODE_W - 16, cy: GRAPH_NODE_H / 2, r: 8
       }));
       const sign = svgEl('text', {
-        class: 'jg-sign', x: GRAPH_NODE_W - 14, y: GRAPH_NODE_H / 2 + 3.5, 'text-anchor': 'middle'
+        class: 'jg-sign', x: GRAPH_NODE_W - 16, y: GRAPH_NODE_H / 2 + 3.5, 'text-anchor': 'middle'
       });
       sign.textContent = rec.open ? '−' : '+';
       g.appendChild(sign);
@@ -275,7 +314,16 @@ export function createGraph(opts) {
     if (!svg) return;
     const b = drawn.bounds;
     const w = b.w / zoom, h = b.h / zoom;
-    svg.setAttribute('viewBox', (centre.x - w / 2) + ' ' + (centre.y - h / 2) + ' ' + w + ' ' + h);
+    const x = centre.x - w / 2, y = centre.y - h / 2;
+    svg.setAttribute('viewBox', x + ' ' + y + ' ' + w + ' ' + h);
+    if (ground) {
+      /* Cover the visible region and then some, so a fast drag never outruns
+         the grid. The pattern is anchored in user space, so it travels. */
+      ground.setAttribute('x', x - w);
+      ground.setAttribute('y', y - h);
+      ground.setAttribute('width', w * 3);
+      ground.setAttribute('height', h * 3);
+    }
   }
 
   function fit() {
@@ -290,34 +338,68 @@ export function createGraph(opts) {
     applyView();
   }
 
-  /** Pixels of pointer travel, in scene units. */
+  /**
+   * One pixel of pointer travel, in scene units.
+   *
+   * preserveAspectRatio is "meet", so the drawing is scaled by whichever axis
+   * runs out of room first — take the same minimum, or a drag lags behind the
+   * cursor on every document whose shape does not match the panel's.
+   */
   function perPixel() {
     const box = typeof host.getBoundingClientRect === 'function' ? host.getBoundingClientRect() : null;
-    const width = box && box.width ? box.width : 1000;
-    return (drawn.bounds.w / zoom) / width;
+    const width = (box && box.width) || 1000;
+    const height = (box && box.height) || 700;
+    const scale = Math.min(width / (drawn.bounds.w / zoom), height / (drawn.bounds.h / zoom));
+    return scale > 0 ? 1 / scale : 1;
   }
 
+  /** Coalesce a gesture's updates onto animation frames. */
+  function schedule(run) {
+    if (frame) return;
+    frame = requestAnimationFrame(() => { frame = 0; run(); });
+  }
+
+  /* Panning. The pointer is captured so the gesture survives leaving the
+     panel, and the viewBox is written once per frame however many moves
+     arrive — writing it on every event is what made this stutter. */
+  let pan = null;
   host.addEventListener('pointerdown', e => {
     if (e.target.closest && e.target.closest('.jg-node')) return;   // nodes take their own clicks
-    const scale = perPixel();
-    const from = { x: e.clientX, y: e.clientY, cx: centre.x, cy: centre.y };
+    pan = { x: e.clientX, y: e.clientY, cx: centre.x, cy: centre.y, scale: perPixel(), id: e.pointerId };
     host.classList.add('panning');
-    const move = (ev) => {
-      centre = { x: from.cx - (ev.clientX - from.x) * scale, y: from.cy - (ev.clientY - from.y) * scale };
-      applyView();
-    };
-    const up = () => {
-      host.classList.remove('panning');
-      removeEventListener('pointermove', move);
-      removeEventListener('pointerup', up);
-    };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
+    if (typeof host.setPointerCapture === 'function' && e.pointerId != null) {
+      try { host.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+    }
   });
+  host.addEventListener('pointermove', e => {
+    if (!pan) return;
+    const to = {
+      x: pan.cx - (e.clientX - pan.x) * pan.scale,
+      y: pan.cy - (e.clientY - pan.y) * pan.scale
+    };
+    schedule(() => { centre = to; applyView(); });
+  });
+  const endPan = (e) => {
+    if (!pan) return;
+    if (typeof host.releasePointerCapture === 'function' && e && e.pointerId != null) {
+      try { host.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+    }
+    pan = null;
+    host.classList.remove('panning');
+  };
+  host.addEventListener('pointerup', endPan);
+  host.addEventListener('pointercancel', endPan);
+  /* Insurance: without pointer capture a release outside the panel would never
+     reach the host, and the next move would carry on panning. */
+  addEventListener('pointerup', endPan);
 
+  /* Wheel events arrive faster than frames, so the steps are multiplied
+     together and applied once — coalesced without dropping any of them. */
+  let wheeled = 1;
   host.addEventListener('wheel', e => {
     e.preventDefault();
-    zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    wheeled *= e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    schedule(() => { zoomBy(wheeled); wheeled = 1; });
   }, { passive: false });
 
   /* ---------- Opening ---------- */

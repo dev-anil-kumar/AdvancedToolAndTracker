@@ -211,15 +211,19 @@
 }
 
 /* ---------- Graph ---------- */
-/* A faint dot grid, so panning and zooming have something to read against. */
 .jgraph-host{
   padding:0;overflow:hidden;cursor:grab;
-  background-color:var(--bg);
-  background-image:radial-gradient(var(--j-rule) 1px, transparent 1px);
-  background-size:22px 22px;
+  background:var(--bg);
   touch-action:none;
+  /* A drag must never turn into a text selection: it looks broken, and the
+     browser's own drag-select fights the pan. */
+  user-select:none;-webkit-user-select:none;
 }
 .jgraph-host.panning{cursor:grabbing}
+.jg text{user-select:none}
+/* The dot grid is drawn inside the SVG, so it pans and zooms with the boxes. */
+.jg-ground{pointer-events:none}
+.jg-dot-mark{fill:var(--j-rule)}
 .jg{display:block;width:100%;height:100%}
 .jg-link{fill:none;stroke:var(--line-strong);stroke-width:1.4}
 .jg-node{cursor:pointer}
@@ -312,5 +316,4 @@
   .jfind{width:130px}
   .jt th,.jt td{max-width:200px}
   .jt td .jlit{max-width:180px}
-  .jgraph-host{background-size:18px 18px}
 }

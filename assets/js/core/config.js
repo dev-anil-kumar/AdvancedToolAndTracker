@@ -100,8 +100,13 @@ export const JSON_MODES = [
 ];
 
 /* ---------- The graph ---------- */
-export const GRAPH_NODE_W = 190;      // scene units; the label is sized to fit
+export const GRAPH_NODE_W = 264;      // scene units; the label is fitted to this
 export const GRAPH_NODE_H = 27;
+export const GRAPH_CHAR_W = 6.9;      // upper bound on one char of the 11px mono stack
+export const GRAPH_KEY_MIN = 8;       // a name is useless below this many characters
+export const GRAPH_VAL_MIN = 6;
+export const GRAPH_VAL_SHARE = 0.55;  // of the label, before the key gets the rest
+export const GRAPH_DOTS = 22;         // background dot spacing, in scene units
 export const GRAPH_GAP_X = 58;        // room for the link between two levels
 export const GRAPH_GAP_Y = 9;
 export const GRAPH_FANOUT = 14;       // children drawn per branch before "+N more"
