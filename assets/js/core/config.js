@@ -5,8 +5,8 @@
 
 /* ---------- Storage ---------- */
 export const DB_NAME = 'folio';
-export const DB_VER = 5;
-export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images'];
+export const DB_VER = 6;
+export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images', 'compares'];
 
 /* ---------- Layout ---------- */
 export const PER_ROW_MIN = 1;
@@ -141,6 +141,68 @@ export const GRAPH_MAX_NODES = 700;   // a map of more than this is not a map
 export const GRAPH_OPEN_DEPTH = 2;
 export const GRAPH_ZOOM_MIN = 0.15;
 export const GRAPH_ZOOM_MAX = 6;
+
+/* ---------- Compare ----------
+   Two files, side by side. The numbers here are what keep a large comparison
+   smooth: a row is a fixed height so only the visible ones are ever in the
+   DOM, and every search that could run long has a ceiling. */
+export const DIFF_ROW_H = 20;          // px per row — uniform, which is what makes virtualising it possible
+export const DIFF_OVERSCAN = 14;       // rows drawn beyond the viewport, so a fast flick stays filled
+export const DIFF_CONTEXT = 3;         // unchanged rows kept either side of a change
+export const DIFF_FOLD_MIN = 10;       // unchanged rows in a row before the middle is folded away
+export const DIFF_MAX_D = 2600;        // Myers search depth before a region is simply called a rewrite
+export const DIFF_HIST_CHAIN = 64;     // times a line may repeat before histogram gives up on it
+export const DIFF_HIST_MIN = 12;       // region smaller than this goes straight to Myers
+export const DIFF_REFINE_ROWS = 6000;  // changed rows refined word by word
+export const DIFF_REFINE_CHARS = 3000; // chars in a line before word refinement is skipped
+export const DIFF_PAIR_WINDOW = 12;    // how far apart two lines may sit and still be one rewrite
+export const DIFF_PAIR_MIN = 0.32;     // similarity below which two lines are unrelated, not rewritten
+export const DIFF_MOVE_MIN = 3;        // lines in a block before a move is worth reporting
+export const DIFF_MOVE_MAX = 4000;     // blocks examined for moves
+export const DIFF_COLOUR_MAX = 200000; // lines before syntax colouring is dropped
+export const DIFF_WORKER_MIN = 2500;   // lines before the work is handed to a worker
+export const DIFF_STORE_MAX = 4 * 1024 * 1024;   // per side, before a comparison is kept for the session only
+export const DIFF_FETCH_MAX = 24 * 1024 * 1024;  // bytes accepted from a URL
+export const DIFF_TABLE_COLS = 200;    // columns a tabular comparison will line up
+export const DIFF_SAVE_MS = 700;
+
+/** Side by side, or one column with the old above the new. */
+export const DIFF_LAYOUTS = [
+  { key: 'split',   label: 'Side by side', hint: 'Two panes, aligned row for row' },
+  { key: 'unified', label: 'Unified',      hint: 'One column, removals above additions' }
+];
+
+/** What the two panes do when you scroll one of them. */
+export const DIFF_SCROLLS = [
+  { key: 'linked', label: 'Linked', hint: 'Scrolling either pane scrolls both, in step' },
+  { key: 'free',   label: 'Free',   hint: 'Each pane scrolls on its own' }
+];
+
+/** How the two files are matched up. 'auto' picks from what they turn out to be. */
+export const DIFF_STRATEGIES = [
+  { key: 'auto',      label: 'Auto',       hint: 'Chosen from what the files turn out to be' },
+  { key: 'structure', label: 'Structural', hint: 'JSON matched key by key, so a reordered key is not a change' },
+  { key: 'table',     label: 'Tabular',    hint: 'CSV matched row by row and column by column' },
+  { key: 'lines',     label: 'Lines',      hint: 'Plain line comparison, whatever the file is' }
+];
+
+/** The line-matching algorithms, in the order the picker offers them. */
+export const DIFF_ALGOS = [
+  { key: 'histogram', label: 'Histogram', hint: 'Anchors on the rarest shared lines first — best for code' },
+  { key: 'patience',  label: 'Patience',  hint: 'Anchors only on lines unique to both sides' },
+  { key: 'myers',     label: 'Myers',     hint: 'Fewest changed lines, with no regard for readability' }
+];
+
+/** Every comparison option that has an on/off state, named once. */
+export const DIFF_OPTIONS = [
+  { key: 'trimEnd',    label: 'Ignore trailing space', hint: 'Space and tabs at the end of a line', code: true,  prose: true },
+  { key: 'allSpace',   label: 'Ignore all whitespace', hint: 'Indentation and runs of spaces inside a line', code: false, prose: false },
+  { key: 'blankLines', label: 'Ignore blank lines',    hint: 'Empty lines on either side', code: false, prose: false },
+  { key: 'caseless',   label: 'Ignore case',           hint: 'Compare letters without regard to case', code: false, prose: false },
+  { key: 'words',      label: 'Word detail',           hint: 'Mark which words changed inside a rewritten line', code: true, prose: true },
+  { key: 'moves',      label: 'Find moved blocks',     hint: 'A block that only changed place is marked as moved, not rewritten', code: true, prose: false },
+  { key: 'syntax',     label: 'Syntax colour',         hint: 'Colour comments, strings and keywords', code: true, prose: false }
+];
 
 /* ---------- Note highlight palette ---------- */
 export const HIGHLIGHTS = [

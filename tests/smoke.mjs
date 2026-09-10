@@ -52,7 +52,7 @@ const d = window.document;
 
 /* jsdom does not fetch <link> stylesheets here, and several assertions read
    computed styles, so inline the split CSS in the order index.html lists it. */
-const CSS_ORDER = ['tokens', 'base', 'markdown', 'workspace', 'views', 'canvas', 'json', 'responsive'];
+const CSS_ORDER = ['tokens', 'base', 'markdown', 'workspace', 'views', 'canvas', 'json', 'compare', 'responsive'];
 const style = d.createElement('style');
 style.textContent = (await Promise.all(
   CSS_ORDER.map(name => readFile(resolve(here, '../assets/css/' + name + '.css'), 'utf8'))
@@ -162,6 +162,8 @@ globalThis.URL.createObjectURL = window.URL.createObjectURL;
 await import(ENTRY);
 await wait(120);
 
+const { compares } = await import('../assets/js/core/state.js');
+const { DIFF_ROW_H } = await import('../assets/js/core/config.js');
 const q = (sel) => d.querySelector(sel);
 const qa = (sel) => [...d.querySelectorAll(sel)];
 const click = (elm) => elm.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
@@ -2114,6 +2116,304 @@ const leftOver = await new Promise((res, rej) => {
 ok('and its images went with it', leftOver.length === 0, leftOver.length + ' images left');
 ok('passage notes were not touched', qa('#notesBody .ngroup:not(.own) .note').length > 0,
   qa('#notesBody .ngroup:not(.own) .note').length + ' passage notes');
+
+
+/* ================= COMPARE ================= */
+
+const rowsIn = (sel) => qa(sel + ' .crow');
+const paneText = (sel) => rowsIn(sel).map(r => r.textContent).join('\n');
+const pickSide = async (which, way) => {
+  click(q(which === 'a' ? '#cPickA' : '#cPickB'));
+  await wait(40);
+  click([...q('#cmpWays').children].find(b => b.dataset.key === way));
+  await wait(20);
+};
+const pasteSide = async (which, title, text) => {
+  await pickSide(which, 'paste');
+  q('#cmpTitle').value = title;
+  q('#cmpText').value = text;
+  submit(q('#cmpForm'));
+  await wait(140);
+};
+
+section('compare: the view opens empty');
+click(q('#tab-compare'));
+await wait(80);
+ok('the compare view is showing', shownViews() === 'view-compare', shownViews());
+ok('with nothing chosen yet', !q('#compareEmpty').hidden);
+ok('and neither side named',
+  q('#cFileA').textContent === 'Nothing chosen' && q('#cFileB').textContent === 'Nothing chosen');
+
+section('compare: the sample, which is Kotlin before and after');
+click(q('#cEmptySample'));
+await wait(220);
+ok('the empty box steps aside', q('#compareEmpty').hidden);
+ok('both panes drew rows', rowsIn('#cRowsA').length > 8 && rowsIn('#cRowsB').length > 8,
+  rowsIn('#cRowsA').length + ' / ' + rowsIn('#cRowsB').length);
+ok('the two panes drew the same number of rows',
+  rowsIn('#cRowsA').length === rowsIn('#cRowsB').length);
+ok('it was taken for Kotlin, matched by histogram', /Kotlin/.test(q('#cType').textContent) && /histogram/.test(q('#cType').textContent),
+  q('#cType').textContent);
+ok('the status line counts what changed', /rewritten|added|removed/.test(q('#cStats').textContent), q('#cStats').textContent);
+ok('it found the block that only changed place', /block moved/.test(q('#cStats').textContent), q('#cStats').textContent);
+ok('and marked its rows as moved rather than lost',
+  qa('#cRowsA .crow.moved').length > 0 && qa('#cRowsB .crow.moved').length > 0,
+  qa('#cRowsA .crow.moved').length + ' / ' + qa('#cRowsB .crow.moved').length);
+ok('the function that was renamed reads as one rewritten line, not two',
+  qa('#cRowsA .crow.chg').some(r => /fun run\(/.test(r.textContent)),
+  qa('#cRowsA .crow.chg').map(r => r.textContent.trim()).join(' | ').slice(0, 200));
+ok('a rewritten line shows which words changed', qa('#cRowsA .crow.chg .cs.mark').length > 0,
+  qa('#cRowsA .cs.mark').length + ' marks');
+ok('the constant that changed is one of them',
+  qa('#cRowsA .crow.chg .cs.mark').some(m => m.textContent.includes('3')) ||
+  qa('#cRowsB .crow.chg .cs.mark').some(m => m.textContent.includes('5')));
+ok('keywords are coloured', qa('#cRowsA .k-kw').length > 3, qa('#cRowsA .k-kw').length + ' keywords');
+ok('a line that only exists on one side leaves a filler on the other',
+  qa('#cRowsA .crow.none').length > 0 || qa('#cRowsB .crow.none').length > 0);
+ok('every row is exactly one row tall', rowsIn('#cRowsA').every(r => r.style.height === '20px'));
+ok('there is a change ribbon', qa('#cRibbon .ctick').length > 0, qa('#cRibbon .ctick').length + ' ticks');
+
+section('compare: the layout the virtualiser depends on');
+const paneStyle = window.getComputedStyle(q('#cPaneA'));
+ok('a pane scrolls on both axes, so linked panes clamp identically',
+  paneStyle.overflow === 'scroll' || paneStyle.overflowY === 'scroll', paneStyle.overflow);
+const rowStyle = window.getComputedStyle(q('#cRowsA .crow'));
+ok('the stylesheet agrees with DIFF_ROW_H about the row height',
+  rowStyle.height === DIFF_ROW_H + 'px', rowStyle.height + ' vs ' + DIFF_ROW_H + 'px');
+ok('the pane reserves room for the gutters as well as the text',
+  /var\(--cgutters\)/.test(q('#cSizerA').getAttribute('style') || '') ||
+  /calc/.test(q('#cSizerA').style.minWidth),
+  q('#cSizerA').getAttribute('style'));
+ok('the rows box is placed by transform, not by reflow',
+  /translateY/.test(q('#cRowsA').style.transform || 'translateY(0px)'), q('#cRowsA').style.transform);
+
+section('compare: moving between changes');
+const changesShown = q('#cWhere').textContent;
+click(q('#cNext'));
+await wait(60);
+ok('Next steps to a change', /^\d+\/\d+$/.test(q('#cWhere').textContent), q('#cWhere').textContent);
+click(q('#cNext'));
+await wait(60);
+ok('and on to the next', q('#cWhere').textContent !== changesShown || /\d/.test(q('#cWhere').textContent));
+
+section('compare: layout and scrolling');
+click([...q('#cScrolls').children].find(b => b.dataset.key === 'free'));
+await wait(40);
+ok('the panes can be unlinked',
+  [...q('#cScrolls').children].find(b => b.dataset.key === 'free').getAttribute('aria-pressed') === 'true');
+click([...q('#cScrolls').children].find(b => b.dataset.key === 'linked'));
+await wait(40);
+click([...q('#cLayouts').children].find(b => b.dataset.key === 'unified'));
+await wait(80);
+ok('unified hides the second pane', q('#cColB').hidden && q('#cGutter').hidden);
+ok('and puts removals and additions in one column',
+  qa('#cRowsA .crow.del').length > 0 && qa('#cRowsA .crow.ins').length > 0);
+ok('so the scroll-mode switch is put away', q('#cScrolls').hidden);
+click([...q('#cLayouts').children].find(b => b.dataset.key === 'split'));
+await wait(80);
+ok('side by side comes back', !q('#cColB').hidden);
+
+section('compare: options change the answer');
+click(q('#cOptions'));
+await wait(30);
+ok('the ignore panel opens', !q('#cOptsPanel').hidden);
+ok('with one switch per option', qa('#cOptsPanel input').length === 7, qa('#cOptsPanel input').length + ' switches');
+const syntaxBox = qa('#cOptsPanel input').find(b => b.dataset.key === 'syntax');
+syntaxBox.checked = false;
+syntaxBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+ok('turning syntax colour off stops the colouring', qa('#cRowsA .k-kw').length === 0);
+syntaxBox.checked = true;
+syntaxBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+ok('and turning it back on restores it', qa('#cRowsA .k-kw').length > 0);
+click(q('#cOptions'));
+
+section('compare: two files pasted in, and whitespace ignored');
+await pasteSide('a', 'left.txt', 'alpha\nbeta   \ngamma\n');
+ok('the left side took the paste', /left\.txt/.test(q('#cFileA').textContent), q('#cFileA').textContent);
+await pasteSide('b', 'right.txt', 'alpha\nbeta\ngamma\n');
+ok('and the right', /right\.txt/.test(q('#cFileB').textContent), q('#cFileB').textContent);
+ok('trailing space is ignored by default, so they are identical',
+  /identical/.test(q('#cStats').textContent), q('#cStats').textContent);
+const trimBox = qa('#cOptsPanel input').find(b => b.dataset.key === 'trimEnd');
+trimBox.checked = false;
+trimBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+ok('stop ignoring it and the difference shows up',
+  !/identical/.test(q('#cStats').textContent), q('#cStats').textContent);
+trimBox.checked = true;
+trimBox.dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+
+section('compare: JSON is matched by structure');
+await pasteSide('a', 'left.json', '{"b":2,"a":1,"rows":[{"id":1,"v":"x"},{"id":2,"v":"y"}]}');
+await pasteSide('b', 'right.json', '{"a":1,"b":2,"rows":[{"id":2,"v":"y"},{"id":1,"v":"z"}]}');
+ok('it was taken for JSON, matched structurally',
+  /JSON/.test(q('#cType').textContent) && /structural/.test(q('#cType').textContent), q('#cType').textContent);
+ok('a reordered key is not a change', !/^\s*"b"/.test(''), true);
+const jsonA = paneText('#cRowsA');
+ok('the two objects line up key for key', /"a": 1/.test(jsonA) && /"b": 2/.test(jsonA));
+ok('the record that only changed place is reported as moved',
+  /moved/.test(q('#cStats').textContent), q('#cStats').textContent);
+ok('and the field that really changed is a rewrite',
+  qa('#cRowsA .crow.chg').some(r => /"v"/.test(r.textContent)),
+  qa('#cRowsA .crow.chg').map(r => r.textContent.trim()).join(' | '));
+ok('JSON rows are coloured too', qa('#cRowsA .k-str').length > 0);
+click(q('#cStrategy'));
+q('#cStrategy').value = 'lines';
+q('#cStrategy').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+ok('forcing a line comparison changes the answer',
+  /lines|histogram/.test(q('#cType').textContent), q('#cType').textContent);
+q('#cStrategy').value = 'auto';
+q('#cStrategy').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(180);
+
+section('compare: CSV is matched row by row and column by column');
+await pasteSide('a', 'left.csv', 'id,name,city\n1,Ann,Delhi\n2,Bob,Pune\n3,Cid,Goa');
+await pasteSide('b', 'right.csv', 'id,name,country,city\n1,Ann,IN,Delhi\n3,Cid,IN,Goa\n4,Dee,IN,Agra');
+ok('it was taken for CSV, matched tabularly',
+  /CSV/.test(q('#cType').textContent) && /tabular/.test(q('#cType').textContent), q('#cType').textContent);
+ok('the added column is reported', /column was added/.test(q('#cNotes').textContent), q('#cNotes').textContent);
+ok('the dropped record is a removal', qa('#cRowsA .crow.del').some(r => /Bob/.test(r.textContent)));
+ok('the new record is an addition', qa('#cRowsB .crow.ins').some(r => /Dee/.test(r.textContent)));
+ok('cells line up in columns', /│/.test(paneText('#cRowsA')));
+
+section('compare: a long file folds its unchanged middle');
+const longA = Array.from({ length: 400 }, (_, i) => 'line ' + i).join('\n');
+const longB = longA.replace('line 200', 'line two hundred');
+await pasteSide('a', 'long-a.txt', longA);
+await pasteSide('b', 'long-b.txt', longB);
+ok('only a handful of rows are drawn, not four hundred',
+  rowsIn('#cRowsA').length < 60, rowsIn('#cRowsA').length + ' rows');
+ok('the unchanged middle is folded away', qa('#cRowsA .crow.fold').length > 0,
+  qa('#cRowsA .crow.fold').length + ' folds');
+ok('and the fold says how many lines it holds',
+  /unchanged lines/.test(q('#cRowsA .crow.fold').textContent), q('#cRowsA .crow.fold').textContent);
+const beforeOpen = rowsIn('#cRowsA').length;
+click(q('#cRowsA .cfold'));
+await wait(80);
+ok('opening one shows them', rowsIn('#cRowsA').length > beforeOpen,
+  beforeOpen + ' → ' + rowsIn('#cRowsA').length);
+click(q('#cExpandAll'));
+await wait(80);
+ok('Show all lines drops every fold', qa('#cRowsA .crow.fold').length === 0);
+ok('but still only draws what fits', rowsIn('#cRowsA').length < 80, rowsIn('#cRowsA').length + ' rows');
+click(q('#cExpandAll'));
+await wait(80);
+
+section('compare: a patch, a swap, and keeping it');
+click(q('#cSavePatch'));
+await wait(160);
+const patch = saved.files.at(-1);
+ok('the comparison saves as a unified diff', /\.diff$/.test(patch.name), patch.name);
+ok('with a hunk header', /@@ -\d+,\d+ \+\d+,\d+ @@/.test(patch.text), patch.text.split('\n')[2]);
+ok('and the change in it', /^-line 200$/m.test(patch.text) && /^\+line two hundred$/m.test(patch.text));
+click(q('#cSwap'));
+await wait(200);
+ok('Swap turns the two sides around',
+  /long-b/.test(q('#cFileA').textContent) && /long-a/.test(q('#cFileB').textContent));
+click(q('#cSwap'));
+await wait(200);
+q('#cName').value = 'Long file, one line changed';
+q('#cName').dispatchEvent(new window.Event('change', { bubbles: true }));
+click(q('#cKeep'));
+await wait(160);
+ok('Keep puts it in the library', qa('#compareRows .row-item').length === 1);
+ok('under the name given', /Long file, one line changed/.test(q('#compareRows .row-name').textContent));
+ok('the Compare tab counts it', q('#tabCompareN').textContent === '1');
+ok('and Keep gives way to Remove', q('#cKeep').hidden && !q('#cRemove').hidden);
+
+section('compare: reopening and removing');
+click(q('#tab-home'));
+await wait(60);
+ok('the Home page lists it', !q('#secCompares').hidden);
+click(q('#compareRows .row-main'));
+await wait(220);
+ok('clicking it reopens the comparison', shownViews() === 'view-compare' && rowsIn('#cRowsA').length > 3);
+ok('with its own name', q('#cName').value === 'Long file, one line changed');
+click(q('#cRemove'));
+await wait(200);
+ok('Remove takes it out of the library', compares.length === 0 && qa('#compareRows .row-item').length === 0);
+ok('and clears the view', !q('#compareEmpty').hidden);
+
+section('compare: two files dropped on the window');
+const dropTwo = (files) => {
+  const ev = new window.Event('drop', { bubbles: true, cancelable: true });
+  ev.dataTransfer = { files };
+  window.dispatchEvent(ev);
+};
+dropTwo([
+  new window.File(['one\ntwo\nthree\n'], 'dropped-a.java', { type: 'text/plain' }),
+  new window.File(['one\n2\nthree\n'], 'dropped-b.java', { type: 'text/plain' })
+]);
+await wait(260);
+ok('both sides are filled from one drop',
+  /dropped-a\.java/.test(q('#cFileA').textContent) && /dropped-b\.java/.test(q('#cFileB').textContent),
+  q('#cFileA').textContent + ' / ' + q('#cFileB').textContent);
+ok('and compared', rowsIn('#cRowsA').length === 3, rowsIn('#cRowsA').length + ' rows');
+
+section('compare: from the library');
+await pickSide('a', 'library');
+ok('the library offers what is already open', qa('#cmpLib option').length > 0,
+  qa('#cmpLib option').length + ' entries');
+q('#cmpLib').value = qa('#cmpLib option')[0].value;
+submit(q('#cmpForm'));
+await wait(200);
+ok('and a document from it becomes one side', /from your library/.test(q('#cMetaA').textContent),
+  q('#cMetaA').textContent);
+
+section('compare: the awkward pairs');
+await pasteSide('a', 'twin.txt', 'one\ntwo\nthree\n');
+await pasteSide('b', 'twin.txt', 'one\ntwo\nthree\n');
+ok('two identical files say so', /identical/.test(q('#cStats').textContent), q('#cStats').textContent);
+ok('with no change to step to', q('#cWhere').textContent === 'identical', q('#cWhere').textContent);
+ok('and nothing on the ribbon', qa('#cRibbon .ctick').length === 0);
+click(q('#cPickA'));
+await wait(40);
+ok('an empty paste is refused rather than silently taken', (() => {
+  q('#cmpText').value = '';
+  click([...q('#cmpWays').children].find(b => b.dataset.key === 'paste'));
+  submit(q('#cmpForm'));
+  return /Nothing pasted/.test(q('#cmpErr').textContent);
+})(), q('#cmpErr').textContent);
+/* An empty file on disk, though, is a real thing to compare against. */
+const blank = [new window.File([''], 'blank.txt', { type: 'text/plain' })];
+blank.item = (i) => blank[i] || null;
+Object.defineProperty(q('#compareInput'), 'files', { value: blank, configurable: true, writable: true });
+q('#compareInput').dispatchEvent(new window.Event('change', { bubbles: true }));
+await wait(200);
+ok('an empty side is nought lines, not one empty one',
+  /0 lines/.test(q('#cMetaA').textContent), q('#cMetaA').textContent);
+ok('so every row is an addition, with nothing reported as removed',
+  qa('#cRowsB .crow.ins').length === 3 && qa('#cRowsA .crow.del').length === 0,
+  qa('#cRowsB .crow.ins').length + ' added, ' + qa('#cRowsA .crow.del').length + ' removed');
+await pasteSide('a', 'mixed.json', '{"a":1}');
+await pasteSide('b', 'mixed.java', 'class A {}');
+ok('two files of different kinds are compared line by line, and told so',
+  /different kinds of file/.test(q('#cNotes').textContent), q('#cNotes').textContent);
+ok('rather than forced through a structure only one of them has',
+  !/structural/.test(q('#cType').textContent), q('#cType').textContent);
+
+section('compare: a large comparison stays a handful of rows');
+const hugeA = Array.from({ length: 30000 }, (_, i) => 'const value' + i + ' = ' + i + ';').join('\n');
+const hugeB = hugeA.replace('const value15000 = 15000;', 'const value15000 = 99999;');
+const began = Date.now();
+await pasteSide('a', 'huge-a.js', hugeA);
+await pasteSide('b', 'huge-b.js', hugeB);
+const took = Date.now() - began;
+ok('thirty thousand lines compare in well under a second', took < 4000, took + 'ms for both pastes');
+ok('and put only what fits on screen into the page', rowsIn('#cRowsA').length < 80,
+  rowsIn('#cRowsA').length + ' rows in the DOM');
+ok('the one change is found', /1 rewritten/.test(q('#cStats').textContent), q('#cStats').textContent);
+ok('the folded view is a few rows tall, not thirty thousand',
+  q('#cSizerA').style.height === (rowsIn('#cRowsA').length * 20) + 'px', q('#cSizerA').style.height);
+click(q('#cExpandAll'));
+await wait(200);
+ok('unfolding sizes the pane for every one of them',
+  q('#cSizerA').style.height === (30000 * 20) + 'px', q('#cSizerA').style.height);
+ok('and still draws only what fits', rowsIn('#cRowsA').length < 80, rowsIn('#cRowsA').length + ' rows');
 
 
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');

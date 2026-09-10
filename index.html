@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Folio — Markdown &amp; JSON Reader</title>
+<title>Folio — Markdown, JSON &amp; Compare</title>
 <meta name="description" content="A quiet reader for Markdown and JSON. Open local files or public URLs, read several side by side, keep notes from anything you select, and pick apart a JSON dump — nested escaped JSON included.">
 <meta name="color-scheme" content="light dark">
 
@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="./assets/css/views.css">
 <link rel="stylesheet" href="./assets/css/canvas.css">
 <link rel="stylesheet" href="./assets/css/json.css">
+<link rel="stylesheet" href="./assets/css/compare.css">
 <link rel="stylesheet" href="./assets/css/responsive.css">
 
 </head>
@@ -35,6 +36,7 @@
     <button role="tab" id="tab-notes" aria-selected="false" aria-controls="view-notes" tabindex="-1">Notes <span class="n" id="tabNotesN"></span></button>
     <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="view-canvas" tabindex="-1">Canvas <span class="n" id="tabCanvasN"></span></button>
     <button role="tab" id="tab-json" aria-selected="false" aria-controls="view-json" tabindex="-1">JSON <span class="n" id="tabJsonN"></span></button>
+    <button role="tab" id="tab-compare" aria-selected="false" aria-controls="view-compare" tabindex="-1">Compare <span class="n" id="tabCompareN"></span></button>
   </div>
 
   <div class="spacer"></div>
@@ -76,6 +78,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5C7 4.5 7.5 9.2 5 12c2.5 2.8 2 7.5 4.5 7.5"/><path d="M14.5 4.5c2.5 0 2 4.7 4.5 7.5-2.5 2.8-2 7.5-4.5 7.5"/></svg>
           Open JSON
         </button>
+        <button class="btn" id="qCompare" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="7.5" height="15" rx="1.6"/><rect x="13.5" y="4.5" width="7.5" height="15" rx="1.6"/><path d="M12 3v18"/></svg>
+          Compare files
+        </button>
         <button class="btn ghost" id="qSample" type="button">Sample document</button>
       </div>
 
@@ -104,6 +110,15 @@
           <button class="link" id="pasteJsonLink" type="button">Paste JSON</button>
         </div>
         <ul class="rows" id="jsonRows"></ul>
+      </section>
+
+      <section class="sec" id="secCompares" hidden>
+        <div class="sec-head">
+          <span class="sec-title">Comparisons</span>
+          <span class="sec-count" id="comparesCount"></span>
+          <button class="link" id="newCompareLink" type="button">New comparison</button>
+        </div>
+        <ul class="rows" id="compareRows"></ul>
       </section>
 
       <section class="sec" id="secNotes" hidden>
@@ -381,12 +396,109 @@
       </div>
     </div>
   </section>
+
+  <!-- ================= COMPARE ================= -->
+  <section class="view" role="tabpanel" id="view-compare" aria-labelledby="tab-compare" tabindex="0" hidden>
+    <div class="jtoolbar ctoolbar">
+      <div class="seg" id="cLayouts" role="group" aria-label="Layout"></div>
+
+      <label class="sr" for="cName">Comparison title</label>
+      <input class="jname" id="cName" type="text" autocomplete="off" spellcheck="false" placeholder="Untitled comparison">
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <span class="ctype" id="cType" title="What these two files were taken to be"></span>
+
+      <label class="sr" for="cStrategy">How the two files are matched up</label>
+      <select class="jpick" id="cStrategy"></select>
+      <label class="sr" for="cAlgo">Line matching algorithm</label>
+      <select class="jpick" id="cAlgo"></select>
+      <button class="btn tiny ghost" id="cOptions" type="button" aria-expanded="false" aria-controls="cOptsPanel">Ignore…</button>
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <div class="seg" id="cScrolls" role="group" aria-label="Scrolling"></div>
+
+      <button class="btn tiny ghost" id="cPrev" type="button" title="Previous change (p)" aria-label="Previous change">&#8593;</button>
+      <span class="jmeta" id="cWhere"></span>
+      <button class="btn tiny ghost" id="cNext" type="button" title="Next change (n)" aria-label="Next change">&#8595;</button>
+      <button class="btn tiny ghost" id="cExpandAll" type="button" aria-pressed="false"
+              title="Show the unchanged lines that are folded away">Show all lines</button>
+
+      <div class="spacer"></div>
+
+      <span class="jmeta" id="cStats"></span>
+
+      <div class="jsep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="cSwap" type="button" title="Swap the two sides">Swap</button>
+      <button class="btn tiny ghost" id="cPatch" type="button" title="Copy this as a unified diff">Copy patch</button>
+      <button class="btn tiny ghost" id="cSavePatch" type="button" title="Save this as a .diff file">Save .diff</button>
+      <button class="btn tiny ghost" id="cKeep" type="button" title="Keep this comparison in your library">Keep</button>
+      <button class="btn tiny ghost danger" id="cRemove" type="button" title="Remove from the library">Remove</button>
+    </div>
+
+    <div class="copts" id="cOptsPanel" role="group" aria-label="Comparison options" hidden></div>
+
+    <div class="cbanner" id="cNotes" hidden></div>
+
+    <div class="cstage" id="cStage">
+      <div class="ccol" id="cColA">
+        <div class="chead">
+          <span class="cside" aria-hidden="true">A</span>
+          <span class="cfile" id="cFileA">Nothing chosen</span>
+          <span class="jmeta" id="cMetaA"></span>
+          <button class="btn tiny ghost" id="cPickA" type="button">Choose…</button>
+        </div>
+        <div class="cpane" id="cPaneA" tabindex="0" aria-label="The left file">
+          <div class="csizer" id="cSizerA"><div class="crows" id="cRowsA"></div></div>
+        </div>
+      </div>
+
+      <button class="cgutter" id="cGutter" type="button" role="separator" aria-orientation="vertical"
+              aria-label="Resize the two panes" title="Drag to resize — arrow keys work too, Enter evens them up"></button>
+
+      <div class="ccol" id="cColB">
+        <div class="chead">
+          <span class="cside" aria-hidden="true">B</span>
+          <span class="cfile" id="cFileB">Nothing chosen</span>
+          <span class="jmeta" id="cMetaB"></span>
+          <button class="btn tiny ghost" id="cPickB" type="button">Choose…</button>
+        </div>
+        <div class="cpane" id="cPaneB" tabindex="0" aria-label="The right file">
+          <div class="csizer" id="cSizerB"><div class="crows" id="cRowsB"></div></div>
+        </div>
+      </div>
+
+      <div class="cribbon" id="cRibbon" aria-hidden="true"></div>
+
+      <div class="json-empty" id="compareEmpty">
+        <div class="box">
+          <h2>Compare two files</h2>
+          <p>Upload them, paste them, download them from a URL, or take two things already in your
+             library. Source, JSON, CSV, prose — Folio works out what they are and matches them up
+             accordingly.</p>
+          <p><strong>JSON</strong> is compared key by key, so a reordered field is not a change and a
+             record that only changed place is reported as moved. <strong>CSV</strong> is compared row
+             by row and column by column. Everything else is compared line by line, anchored on the
+             rarest shared lines so that a moved function reads as a moved function rather than as a
+             wall of red and green — and then word by word inside each rewritten line.</p>
+          <div class="empty-acts">
+            <button class="btn primary" id="cEmptyA" type="button">Choose the left file</button>
+            <button class="btn" id="cEmptyB" type="button">Choose the right file</button>
+            <button class="btn ghost" id="cEmptySample" type="button">Sample comparison</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
 
 <input type="file" id="fileInput" class="sr" multiple
        accept=".md,.markdown,.mdown,.mkd,.mdwn,.txt,.text,.pdf,.xlsx,.xlsm,.xlsb,.xls,.csv,.tsv,.ods,text/markdown,text/plain,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet">
 <input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
 <input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.txt,application/json,text/plain" class="sr" multiple>
+<input type="file" id="compareInput" class="sr" multiple>
 <input type="file" id="noteImageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif" class="sr" multiple>
 
 <div class="selpop" id="selpop" hidden role="group" aria-label="Selection actions">
@@ -415,6 +527,51 @@
     <div class="dlg-acts">
       <button class="btn ghost" type="button" data-close>Cancel</button>
       <button class="btn primary" id="urlSubmit" type="submit">Download &amp; read</button>
+    </div>
+  </form>
+</dialog>
+
+
+<dialog id="cmpDlg" class="wide" aria-labelledby="cmpDlgTitle">
+  <div class="dlg-head">
+    <h2 id="cmpDlgTitle">Choose a file</h2>
+    <p id="cmpDlgLede">Upload it, paste it, download it from a URL, or take something already in your library.</p>
+  </div>
+  <form class="dlg-body" id="cmpForm">
+    <div class="seg cways" id="cmpWays" role="group" aria-label="Where the file comes from"></div>
+
+    <div class="cmp-way" id="cmpWayFile">
+      <button class="btn" id="cmpPick" type="button">Choose a file…</button>
+      <span class="jmeta" id="cmpPicked"></span>
+      <p class="dlg-note">Any text file: source in any language, JSON, CSV, Markdown, a log. You can
+        also drop two files anywhere on this window and Folio will compare them.</p>
+    </div>
+
+    <div class="cmp-way" id="cmpWayPaste" hidden>
+      <label class="field-label" for="cmpTitle">Name <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+      <input class="input" id="cmpTitle" type="text" autocomplete="off" placeholder="Helps Folio guess the language — try Main.java">
+      <label class="field-label" for="cmpText">Text</label>
+      <textarea class="input cmp-text" id="cmpText" spellcheck="false" placeholder="Paste anything here."></textarea>
+    </div>
+
+    <div class="cmp-way" id="cmpWayUrl" hidden>
+      <label class="field-label" for="cmpUrl">File URL</label>
+      <input class="input" id="cmpUrl" type="url" inputmode="url" spellcheck="false" autocomplete="off"
+             placeholder="https://raw.githubusercontent.com/user/repo/main/src/Main.java">
+      <p class="dlg-note">GitHub <code>/blob/</code> links are converted to their raw form automatically. The
+        server must allow cross-origin reads (<code>Access-Control-Allow-Origin</code>).</p>
+    </div>
+
+    <div class="cmp-way" id="cmpWayLib" hidden>
+      <label class="field-label" for="cmpLib">Something already in your library</label>
+      <select class="input" id="cmpLib"></select>
+      <p class="dlg-note" id="cmpLibNote">Documents and JSON you have opened before.</p>
+    </div>
+
+    <div class="dlg-err" id="cmpErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" id="cmpUse" type="submit">Use this file</button>
     </div>
   </form>
 </dialog>
@@ -578,6 +735,96 @@
       1
     ]
   }
+}
+</script>
+
+
+<!-- Sample comparison: the same Kotlin file before and after a session of work.
+     Between them: two constants changed, a parameter added, a function renamed,
+     another moved unchanged to the top of the class, and a whole function written —
+     one of each thing the comparison is meant to tell apart. -->
+<script id="sample-cmp-a" type="text/plain">
+package app.sync
+
+import kotlinx.coroutines.delay
+
+const val RETRY_LIMIT = 3
+const val TIMEOUT_MS = 30_000L
+
+data class Job(val id: String, val kind: String, val attempts: Int = 0)
+
+class Queue(private val store: Store) {
+
+    suspend fun drain(): Int {
+        var done = 0
+        while (true) {
+            val job = store.next() ?: break
+            if (run(job)) done++
+        }
+        return done
+    }
+
+    private suspend fun run(job: Job): Boolean {
+        repeat(RETRY_LIMIT) { round ->
+            if (send(job)) return true
+            delay(backoff(round))
+        }
+        store.park(job)
+        return false
+    }
+
+    private fun backoff(round: Int): Long {
+        val step = 250L * (round + 1)
+        return step.coerceAtMost(8_000L)
+    }
+
+    private suspend fun send(job: Job): Boolean {
+        return store.transport.post(job.id, job.kind, TIMEOUT_MS)
+    }
+}
+</script>
+<script id="sample-cmp-b" type="text/plain">
+package app.sync
+
+import kotlinx.coroutines.delay
+
+const val RETRY_LIMIT = 5
+const val TIMEOUT_MS = 15_000L
+
+data class Job(val id: String, val kind: String, val attempts: Int = 0, val priority: Int = 0)
+
+class Queue(private val store: Store) {
+
+    private fun backoff(round: Int): Long {
+        val step = 250L * (round + 1)
+        return step.coerceAtMost(8_000L)
+    }
+
+    suspend fun drain(): Int {
+        var done = 0
+        while (true) {
+            val job = store.next() ?: break
+            if (attempt(job)) done++
+        }
+        return done
+    }
+
+    private suspend fun attempt(job: Job): Boolean {
+        repeat(RETRY_LIMIT) { round ->
+            if (send(job)) return true
+            delay(backoff(round))
+        }
+        store.park(job)
+        return false
+    }
+
+    private suspend fun send(job: Job): Boolean {
+        return store.transport.post(job.id, job.kind, job.priority, TIMEOUT_MS)
+    }
+
+    suspend fun purge(olderThan: Long): Int {
+        return store.dropBefore(olderThan)
+    }
 }
 </script>
 

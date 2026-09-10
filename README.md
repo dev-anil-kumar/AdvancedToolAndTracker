@@ -2,9 +2,10 @@
 
 A quiet, local-first reader for Markdown, PDF, spreadsheets and JSON. Open documents
 from your disk or a public URL, read several side by side, keep notes from anything you
-select, sketch a diagram, and pick apart a JSON dump — including the JSON that arrives
-stuffed inside a string. Everything is stored in your browser — no accounts, no server,
-no telemetry.
+select, sketch a diagram, pick apart a JSON dump — including the JSON that arrives
+stuffed inside a string — and compare two files of almost any kind, line by line or by
+their structure. Everything is stored in your browser — no accounts, no server, no
+telemetry.
 
 Static files only: **no build step, no bundler, no framework.** Deploys to GitHub Pages
 by pushing.
@@ -41,7 +42,7 @@ Optional, and only needed for development:
 
 ```bash
 npm install
-npm test      # integration smoke test: 456 assertions through the real module graph
+npm test      # integration smoke test: 533 assertions through the real module graph
 npm run lint  # ESLint; no-undef is what catches a missing import with no bundler
 ```
 
@@ -64,6 +65,7 @@ assets/
     views.css               Home and Notes pages
     canvas.css              tool strip, drawing surface, shapes
     json.css                JSON toolbar, tree, table, code, source pane
+    compare.css             compare toolbar, the two panes, rows, ribbon
     responsive.css          breakpoints, and the last word on [hidden]
   js/
     main.js                 wiring and boot
@@ -71,12 +73,14 @@ assets/
     md/renderer.js          marked → DOMPurify → highlight.js → enhancements
     features/               theme · highlight · library · workspaces · panes ·
                             pane-resize · notes · note-images · exporter ·
-                            focus · drawings · jsondocs
+                            focus · drawings · jsondocs · compares
     features/convert/       loader · pdf · sheet — other formats, into Markdown
     features/canvas/        model · editor
     features/json/          model · tree · table · graph · code
+    features/diff/          myers · histogram · text · tokens · syntax ·
+                            json · table · align · detect · index · worker
     ui/                     shell · home · notes-view · note-editor · dialogs ·
-                            canvas-view · json-view
+                            canvas-view · json-view · compare-view
 ```
 
 ### The one rule
@@ -124,7 +128,7 @@ changed an array. Questions are asked through selectors (`fileById`, `panesIn`,
 
 ### Storage
 
-IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings` / `jsondocs` / `images`), wrapped in `core/db.js` with
+IndexedDB (`folio`, stores `files` / `notes` / `prefs` / `drawings` / `jsondocs` / `images` / `compares`), wrapped in `core/db.js` with
 an in-memory fallback so a browser that blocks storage degrades to session-only
 instead of breaking. Writes go through `persist()`, which never rejects — it warns
 once and carries on. Nothing uses `localStorage`.
@@ -154,6 +158,11 @@ open a PDF or a spreadsheet, so loading them up front would make every visit pay
 feature most visits do not use. `features/convert/loader.js` appends the script the first
 time one is needed and caches the promise; a library already on the page is used as it
 stands, which is also what lets the tests supply their own.
+
+Compare adds none either. `features/diff/` is Myers' algorithm, histogram anchoring,
+detection and a small tokeniser, written out — some four hundred lines of algorithm
+against the several hundred kilobytes a diff library would have cost, and the reason the
+same code can run in a worker without a bundler to make a second copy of it.
 
 The JSON view adds no dependencies: its parser is `JSON.parse`, and its colouring is a
 tokeniser in `features/json/model.js`. highlight.js would have done the job, except that
@@ -287,5 +296,97 @@ distinction a reader of unfamiliar data needs.
     *Edit values* is switched on. Then a click edits a value, a double-click renames a
     key, and `+`/`×` add and remove entries; what you type is read as JSON if it parses
     and as a string if it does not. Everything autosaves.
+- **Compare** — two files, side by side, aligned row for row. Each side is uploaded,
+  pasted, downloaded from a URL, or taken from something already in your library; drop
+  two files on the window while the Compare tab is open and it takes both. Comparisons
+  can be kept, so you come back to one rather than setting it up again.
+  - **What kind of file is this?** The extension decides when there is one. When there
+    is not — pasted text, a URL ending in a slash, a file called `dump` — the content
+    is asked instead: first the shapes that can be *confirmed* rather than guessed
+    (JSON parses or it does not; a CSV has the same number of delimiters on every
+    line), then a weighted vote over the phrases that only ever appear in one language.
+    `fun x(` with `val` is Kotlin; `fun x(` with `let mut` is Rust; `public class` with
+    `void` is Java. No single line proves anything, which is why they are weighed
+    rather than searched for. Two files that turn out to be different languages are
+    compared as lines and told so.
+  - **How they are matched depends on what they are.** JSON key by key, CSV row by row,
+    everything else line by line — and what the file turns out to be also decides which
+    options arrive switched on, because trailing space matters in a fixture and not in
+    source. A strategy that cannot run (JSON that does not parse) falls back to lines
+    and says why rather than refusing.
+  - **Lines** — Myers' O(ND) algorithm in linear space, so two ten-megabyte files are
+    matched in O(N) memory instead of O(N·M). But a *shortest* edit path is often a
+    nonsense one: given two functions that both end in `}` and `return null;` it will
+    pair the closing brace of one with the closing brace of the other and shred both
+    bodies around them. So lines are counted first and the comparison is anchored on
+    the *rarest* ones — patience diff by way of `git diff --histogram` — and rarity is
+    taken in tiers, the rarest tier that yields anything at all winning outright. A
+    line unique to both sides is almost certainly the same line; a closing brace is
+    almost certainly not, and deferring the braces to the gaps *between* the anchors is
+    the whole difference between reading a diff and staring at one. All the candidate
+    anchors are used at once, chained by the longest increasing subsequence of their
+    positions — patience sorting, O(R log R) — rather than one at a time, because
+    picking one and recursing throws away half the file when every candidate scores the
+    same. **Patience** (anchor only on lines unique to both) and **Myers** (fewest
+    changed lines, readability be damned) are both offered, because on a minified or
+    generated file the trade goes the other way.
+  - **Words** — a pair of rows reading `const timeout = 30;` and `const timeout = 45;`
+    in solid red and solid green tells you nothing you could not see for yourself. So a
+    rewritten line is compared again over *tokens* — characters find edits inside words
+    and produce confetti; tokens find the word that changed. Which lines are a rewrite
+    at all is decided first, by how alike they are (Sørensen–Dice over character
+    pairs), so three lines replaced by five come out as three rewrites and two
+    additions rather than five of each.
+  - **Moved blocks** — a block removed from one place and added, unchanged, to another
+    is one move, not two edits, and reading it as two is how a reordered set of
+    functions becomes an unreadable diff. Each block is fingerprinted by its lines;
+    equal fingerprints on opposite sides are the same block in a new place, marked as
+    moved rather than as lost and gained.
+  - **JSON, by structure** — reordering an object's keys changes nothing about what the
+    document says, and a line comparison reports every one of them. So both sides are
+    parsed and walked together, and the key *lists* are matched by longest common
+    subsequence so an added field lands where it belongs instead of at the end. Arrays
+    are the interesting part: `[{id: 1}, {id: 2}]` against `[{id: 2}, {id: 1}]` holds
+    the same two records. An array of records is examined for a field that identifies
+    them — `id`, `key`, `name`, or whatever else turns out to be present everywhere and
+    unique on both sides — and matched on that, so a record in a different position is
+    one record that *moved*, with whatever else changed about it still compared. Failing
+    that, elements are matched on a canonical hash of their contents and the leftovers
+    paired positionally, so you are told which field of the third element changed rather
+    than that the third element is new. JSON smuggled through a string is recognised and
+    compared as the document it is.
+  - **CSV and TSV, by row and column** — headers matched by name, so a column inserted
+    at the front is one column added rather than every line changed; records matched by
+    their first column when it identifies them and by a row hash when it does not; and
+    every cell padded to its column's width so the two panes line up column for column
+    and a field can be read down the page.
+  - **Ignore** — trailing space, all whitespace, blank lines, case. Ignoring blank lines
+    does not hide them: a change made entirely of blank lines stays on screen, in place,
+    but is not counted and not worth jumping to.
+  - **Reading it** — drag the divider to give either side more room (arrow keys work,
+    Enter evens them up); scroll the two panes **Linked** or **Free**; switch to a
+    **Unified** column; step through the changes with the arrows or <kbd>n</kbd> and
+    <kbd>p</kbd>; and use the ribbon down the right edge, which is a map of the whole
+    file showing how much changed and where. Changed lines are coloured; unchanged ones
+    are syntax-coloured — never both, because a line marked twice over is harder to read
+    than a line marked once.
+  - **Large files** — a comparison of two hundred-thousand-line files is two hundred
+    thousand rows, and a browser asked to hold that many elements stops being a browser.
+    Every row is exactly one line tall, so the row under any scroll position is
+    arithmetic rather than measurement: the pane gets a spacer of the full height and
+    the forty-odd rows on screen are drawn into a box translated to the right offset.
+    Both panes draw from the same row list, which is why their halves always align and
+    why linking them is just copying a scroll position. A long unchanged run keeps a
+    little context at each end and offers the rest behind one row. Lines are interned to
+    integers before any matching starts, lines that occur nowhere in the other file are
+    set aside before the expensive part begins, and the matching itself goes to a module
+    worker so the tab never stops answering. Every search that could run long has a
+    ceiling: a region too tangled to match inside its budget is reported as a rewrite —
+    honestly and instantly, rather than correctly in a minute — and the comparison says
+    so when that happened.
+  - **Out** — copy or save the whole thing as a unified diff, written from the rows so
+    the `.diff` file says exactly what the screen said.
+  - Shortcuts: <kbd>n</kbd>/<kbd>p</kbd> next and previous change, <kbd>u</kbd> unified,
+    <kbd>s</kbd> scroll mode, <kbd>x</kbd> show every line, <kbd>w</kbd> swap the sides.
 - **Accessibility** — real tab/tabpanel, tree/treeitem and separator roles, visible focus
   rings, `prefers-reduced-motion` respected, keyboard paths for the drag interactions.

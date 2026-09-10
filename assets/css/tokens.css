@@ -40,6 +40,18 @@
   --j-rule:#e7eaed;
   --j-hit:#ffe08a;
   --j-hit-ink:#3a2c00;
+  /* Compare. Removal and arrival are the two inks a diff cannot do without;
+     a rewrite borrows amber, and a block that only moved borrows violet, so
+     "gone", "new", "edited" and "moved elsewhere" are four distinct answers. */
+  --c-del:#9c3b34;
+  --c-ins:#2f6b43;
+  --c-del-bg:rgba(156,59,52,.10);
+  --c-ins-bg:rgba(47,107,67,.10);
+  --c-del-mark:rgba(156,59,52,.26);
+  --c-ins-mark:rgba(47,107,67,.26);
+  --c-chg-bg:rgba(201,138,27,.09);
+  --c-move:#6c5aa8;
+  --c-move-bg:rgba(108,90,168,.10);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -55,6 +67,11 @@
     --j-key:#7fc4e3; --j-str:#8ec98f; --j-num:#e0b464; --j-bool:#b3a6e8;
     --j-null:#7d868f; --j-punct:#6d7680; --j-brace:#8b949e; --j-embed:#e6919f;
     --j-gutter:#5b656e; --j-rule:#1e242a; --j-hit:#6a5312; --j-hit-ink:#ffe9b0;
+    --c-del:#e08a80; --c-ins:#7fc98f;
+    --c-del-bg:rgba(224,138,128,.11); --c-ins-bg:rgba(127,201,143,.10);
+    --c-del-mark:rgba(224,138,128,.30); --c-ins-mark:rgba(127,201,143,.28);
+    --c-chg-bg:rgba(224,180,100,.09);
+    --c-move:#b3a6e8; --c-move-bg:rgba(179,166,232,.12);
   }
 }
 :root[data-theme="dark"]{
@@ -70,6 +87,11 @@
   --j-key:#7fc4e3; --j-str:#8ec98f; --j-num:#e0b464; --j-bool:#b3a6e8;
   --j-null:#7d868f; --j-punct:#6d7680; --j-brace:#8b949e; --j-embed:#e6919f;
   --j-gutter:#5b656e; --j-rule:#1e242a; --j-hit:#6a5312; --j-hit-ink:#ffe9b0;
+  --c-del:#e08a80; --c-ins:#7fc98f;
+  --c-del-bg:rgba(224,138,128,.11); --c-ins-bg:rgba(127,201,143,.10);
+  --c-del-mark:rgba(224,138,128,.30); --c-ins-mark:rgba(127,201,143,.28);
+  --c-chg-bg:rgba(224,180,100,.09);
+  --c-move:#b3a6e8; --c-move-bg:rgba(179,166,232,.12);
 }
 
 *,*::before,*::after{box-sizing:border-box}

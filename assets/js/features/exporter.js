@@ -16,7 +16,8 @@ const FILE_TYPES = {
   md:   { ext: '.md',   mime: 'text/markdown', label: 'Markdown', accept: ['.md', '.markdown'] },
   json: { ext: '.json', mime: 'application/json', label: 'Folio drawing', accept: ['.json'] },
   svg:  { ext: '.svg',  mime: 'image/svg+xml', label: 'SVG image', accept: ['.svg'] },
-  png:  { ext: '.png',  mime: 'image/png', label: 'PNG image', accept: ['.png'] }
+  png:  { ext: '.png',  mime: 'image/png', label: 'PNG image', accept: ['.png'] },
+  diff: { ext: '.diff', mime: 'text/x-diff', label: 'Unified diff', accept: ['.diff', '.patch'] }
 };
 
 export const canPickDir = typeof window.showDirectoryPicker === 'function';

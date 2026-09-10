@@ -21,7 +21,7 @@ import { $ } from './core/dom.js';
 import { dbAll } from './core/db.js';
 import { hashView, route } from './core/router.js';
 import {
-  loadPrefs, setActiveWs, setDrawings, setFiles, setImages, setJsonDocs, setNotes, workspaces
+  loadPrefs, setActiveWs, setCompares, setDrawings, setFiles, setImages, setJsonDocs, setNotes, workspaces
 } from './core/state.js';
 
 import { applyTheme, toggleTheme } from './features/theme.js';
@@ -39,6 +39,7 @@ import { openNoteEditor } from './ui/note-editor.js';
 import { promptPaste, promptUrl } from './ui/dialogs.js';
 import { pickDrawingFile, renderDrawings } from './ui/canvas-view.js';
 import { openJsonFiles, renderJsonDocs } from './ui/json-view.js';
+import { acceptCompareDrop, renderCompares } from './ui/compare-view.js';
 
 /* ================= Wiring ================= */
 const pickFile = () => $('#fileInput').click();
@@ -73,10 +74,13 @@ addEventListener('drop', e => {
   dragDepth = 0;
   const dropped = e.dataTransfer && e.dataTransfer.files ? [...e.dataTransfer.files] : [];
   if (!dropped.length) return;
-  /* Sort by what each file is: JSON opens in the JSON view, everything else
-     goes to the library, which converts a PDF or a spreadsheet on the way in.
-     A drawing dropped on the canvas never reaches here — that handler stops
-     it, as does an image dropped on the note editor. */
+  /* While the Compare view is on screen, a dropped file is one of the two
+     sides. Nothing else could sensibly be meant by it there. */
+  if (document.body.dataset.view === 'compare' && acceptCompareDrop(dropped)) return;
+  /* Otherwise sort by what each file is: JSON opens in the JSON view,
+     everything else goes to the library, which converts a PDF or a spreadsheet
+     on the way in. A drawing dropped on the canvas never reaches here — that
+     handler stops it, as does an image dropped on the note editor. */
   const json = dropped.filter(f => sniff(f) === 'json');
   const docs = dropped.filter(f => sniff(f) !== 'json');
   if (json.length) openJsonFiles(json);
@@ -89,14 +93,15 @@ addEventListener('drop', e => {
   initShell();
 
   try {
-    const [f, n, dr, js, im] = await Promise.all([
-      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images')
+    const [f, n, dr, js, im, cm] = await Promise.all([
+      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images'), dbAll('compares')
     ]);
     setFiles(f || []);
     setNotes((n || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     setDrawings(dr || []);
     setJsonDocs(js || []);
     setImages(im || []);
+    setCompares(cm || []);
   } catch (err) {
     console.warn('Folio: could not read saved data', err);
   }
@@ -112,6 +117,7 @@ addEventListener('drop', e => {
   renderNotes();
   renderDrawings();
   renderJsonDocs();
+  renderCompares();
   emit(EVENTS.PANES);
   route(hashView() || 'home', { replace: true });
 })();

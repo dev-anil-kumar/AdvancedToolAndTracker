@@ -34,5 +34,6 @@ export const EVENTS = {
   VIEW: 'view',            // the active view changed
   DRAWINGS: 'drawings',    // a drawing was created, saved, or removed
   JSONDOCS: 'jsondocs',    // a JSON document was added, edited, or removed
+  COMPARES: 'compares',    // a comparison was added, edited, or removed
   REVEAL_FILE: 'reveal-file' // jump to a document's notes group
 };
