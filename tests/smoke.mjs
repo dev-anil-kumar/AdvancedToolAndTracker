@@ -1384,11 +1384,51 @@ ok('the tree filters down to the matches', jrows().length < 40 && !!jrowText('AN
   jrows().length + ' rows');
 ok('the match is reached through the embedded document', !!jrow('synced_call_details_queue'));
 ok('and unrelated branches are gone', !jrow('device'));
+ok('the term itself is marked where it was found', qa('#jTreeHost mark.jhit').length > 0,
+  qa('#jTreeHost mark.jhit').length + ' marks');
+
+section('json: stepping through the matches');
+const pressFind = (key, opts) => q('#jSearch').dispatchEvent(
+  new window.KeyboardEvent('keydown', Object.assign({ key, bubbles: true }, opts || {})));
+const hitTotal = Number((q('#jHits').textContent.match(/(\d+) match/) || [])[1]);
+ok('the step buttons appear once there is something to step to',
+  !q('#jPrev').hidden && !q('#jNext').hidden);
+pressFind('Enter');
+await wait(80);
+ok('Enter lands on the first match', /^1 of /.test(q('#jHits').textContent), q('#jHits').textContent);
+ok('and says which row it is', qa('#jTreeHost .jrow.hit-now').length === 1,
+  qa('#jTreeHost .jrow.hit-now').length + ' marked rows');
+pressFind('Enter');
+await wait(80);
+ok('Enter again goes to the next', /^2 of /.test(q('#jHits').textContent), q('#jHits').textContent);
+for (let i = 2; i < hitTotal; i++) { pressFind('Enter'); await wait(40); }
+ok('stepping reaches the last one', q('#jHits').textContent.startsWith(hitTotal + ' of '),
+  q('#jHits').textContent);
+pressFind('Enter');
+await wait(80);
+ok('and the one after the last is the first again', /^1 of /.test(q('#jHits').textContent),
+  q('#jHits').textContent);
+pressFind('Enter', { shiftKey: true });
+await wait(80);
+ok('shift-Enter goes back, wrapping the other way',
+  q('#jHits').textContent.startsWith(hitTotal + ' of '), q('#jHits').textContent);
+pressFind('ArrowDown');
+await wait(80);
+ok('the down arrow steps forward too', /^1 of /.test(q('#jHits').textContent), q('#jHits').textContent);
+pressFind('ArrowUp');
+await wait(80);
+ok('and the up arrow back', q('#jHits').textContent.startsWith(hitTotal + ' of '), q('#jHits').textContent);
+click(q('#jNext'));
+await wait(80);
+ok('the buttons do the same as the keys', /^1 of /.test(q('#jHits').textContent), q('#jHits').textContent);
+
 q('#jSearch').value = '';
 q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(240);
 ok('clearing the search puts back exactly what was open before it',
   jrows().length === rowsBeforeSearch, jrows().length + ' vs ' + rowsBeforeSearch + ' rows');
+ok('and takes the step buttons away with it', q('#jPrev').hidden && q('#jNext').hidden);
+ok('and every mark', qa('#jTreeHost mark.jhit').length === 0);
 
 section('json: expand and collapse');
 click(q('#jExpand'));
@@ -1449,6 +1489,16 @@ q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(240);
 ok('the table filters', qa('#jTableHost tbody tr').length === 1,
   qa('#jTableHost tbody tr').length + ' rows');
+ok('and marks the term in the cell it was found in', qa('#jTableHost mark.jhit').length > 0,
+  qa('#jTableHost mark.jhit').length + ' marks');
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(80);
+ok('Enter steps to the matching row', qa('#jTableHost tbody tr.hit-now').length === 1,
+  q('#jHits').textContent);
+ok('and the hit line says where it is', /^1 of 1 row/.test(q('#jHits').textContent), q('#jHits').textContent);
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(80);
+ok('a single match wraps back onto itself', /^1 of 1 row/.test(q('#jHits').textContent), q('#jHits').textContent);
 q('#jSearch').value = '';
 q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(240);
@@ -1562,6 +1612,15 @@ q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(280);
 ok('find counts the same matches as the tree', /2 matches/.test(q('#jHits').textContent), q('#jHits').textContent);
 ok('and the map is cut down to them', gboxes().length < 12 && !gbox('device'), gboxes().length + ' boxes');
+ok('the matching boxes are marked', qa('#jGraphHost .jg-node.hit').length === 2,
+  qa('#jGraphHost .jg-node.hit').length + ' marked');
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(120);
+ok('Enter singles one of them out', qa('#jGraphHost .jg-node.hit-now').length === 1,
+  q('#jHits').textContent);
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(120);
+ok('and Enter again moves on', /^2 of 2 match/.test(q('#jHits').textContent), q('#jHits').textContent);
 q('#jSearch').value = '';
 q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(280);
@@ -1681,6 +1740,16 @@ q('#jSearch').value = 'ANSWERED';
 q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(260);
 ok('search marks the code', qa('.jc-hit').length > 0, qa('.jc-hit').length + ' marks');
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(80);
+ok('Enter picks one mark out of the rest', qa('.jc-hit.hit-now').length === 1,
+  qa('.jc-hit.hit-now').length + ' current');
+ok('and counts from it', /^1 of \d+ match/.test(q('#jHits').textContent), q('#jHits').textContent);
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(80);
+ok('the next one takes the mark over', /^2 of \d+ match/.test(q('#jHits').textContent),
+  q('#jHits').textContent);
+ok('only ever one at a time', qa('.jc-hit.hit-now').length === 1);
 q('#jSearch').value = '';
 q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
 await wait(240);
@@ -1764,6 +1833,19 @@ click(q('#jMinify'));
 await wait(120);
 ok('minify strips the whitespace', q('#jEditArea').value === '{"a":{"y":2,"z":1},"b":[3,1,2]}',
   q('#jEditArea').value);
+q('#jSearch').value = '"a"';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
+q('#jSearch').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await wait(80);
+ok('find works in the source pane too, where it used to do nothing',
+  /^1 of 1 match/.test(q('#jHits').textContent), q('#jHits').textContent);
+ok('and puts the selection on the match',
+  q('#jEditArea').value.slice(q('#jEditArea').selectionStart, q('#jEditArea').selectionEnd) === '"a"',
+  q('#jEditArea').value.slice(q('#jEditArea').selectionStart, q('#jEditArea').selectionEnd));
+q('#jSearch').value = '';
+q('#jSearch').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(240);
 await wait(700);
 ok('the source edit was saved', jsonDocsNow()[0].text === '{"a":{"y":2,"z":1},"b":[3,1,2]}',
   jsonDocsNow()[0].text.slice(0, 40));

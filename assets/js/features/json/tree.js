@@ -13,7 +13,7 @@
  *    boxes, no controls in the margin — until the reader asks for them.
  */
 import { JSON_CHUNK, STRING_FULL, STRING_INLINE } from '../../core/config.js';
-import { el } from '../../core/dom.js';
+import { el, markInto } from '../../core/dom.js';
 import {
   PATH_SEP as SEP, childCount, embedded, isBranch, looksTruncated, matchPaths,
   pathKey as keyOf, pathString, peek, summarise, typeOf
@@ -38,6 +38,9 @@ export function createTree(opts) {
   let query = '';
   let selected = null;
   let hits = 0;
+  let matches = [];                // matching path keys, in the order they are shown
+  let matchSet = new Set();        // the same, for asking "is this row one of them"
+  let current = null;              // the match being stepped to
   let want = null;                 // a path being brought into view
   let openBefore = null;           // what was open before a search took over
 
@@ -156,9 +159,12 @@ export function createTree(opts) {
   /** Ask model.js what matches, then let only those paths through. */
   function runSearch(text) {
     query = String(text || '').trim();
+    current = null;
     if (!query) {
       keep = null;
       hits = 0;
+      matches = [];
+      matchSet = new Set();
       if (openBefore) { open = openBefore; openBefore = null; }
       return 0;
     }
@@ -166,6 +172,8 @@ export function createTree(opts) {
     const found = matchPaths(rootValue, query);
     keep = found.paths;
     hits = found.hits;
+    matches = found.matches;
+    matchSet = new Set(matches);
     open = new Set([...keep]);        // matches arrive already opened
     return hits;
   }
@@ -187,6 +195,8 @@ export function createTree(opts) {
     row.style.setProperty('--d', String(n.depth));
     row.dataset.type = typeOf(n.value);
     if (selected === n.pathKey) row.classList.add('sel');
+    if (matchSet.has(n.pathKey)) row.classList.add('hit');
+    if (current === n.pathKey) row.classList.add('hit-now');
     wrap._node = n;
 
     const branch = expandable(n);
@@ -208,7 +218,8 @@ export function createTree(opts) {
     row.appendChild(twisty);
 
     if (n.parent || n.depth > 0) {
-      const label = el('span', 'jkey', String(n.key));
+      const label = el('span', 'jkey');
+      markInto(label, String(n.key), query);
       if (typeof n.key === 'number') label.classList.add('idx');
       if (editable && !Array.isArray(n.container)) {
         label.title = 'Double-click to rename';
@@ -281,18 +292,19 @@ export function createTree(opts) {
       const long = value.length > STRING_INLINE;
       cell.appendChild(text);
       if (multiline || long) {
-        text.textContent = peek(value, STRING_INLINE);
+        markInto(text, peek(value, STRING_INLINE), query);
         cell.appendChild(el('span', 'jchip soft',
           multiline ? 'multi-line' : value.length.toLocaleString() + ' chars'));
-        cell.appendChild(el('pre', 'jstring-full',
-          value.length > STRING_FULL ? value.slice(0, STRING_FULL) + '\n…' : value));
+        const full = el('pre', 'jstring-full');
+        markInto(full, value.length > STRING_FULL ? value.slice(0, STRING_FULL) + '\n…' : value, query);
+        cell.appendChild(full);
         cell.classList.add('has-full');
       } else {
-        text.textContent = value;
+        markInto(text, value, query);
       }
       if (looksTruncated(value)) cell.appendChild(el('span', 'jchip warn', 'truncated JSON'));
     } else {
-      text.textContent = t === 'null' ? 'null' : String(value);
+      markInto(text, t === 'null' ? 'null' : String(value), query);
       cell.appendChild(text);
     }
     if (editable) {
@@ -520,6 +532,9 @@ export function createTree(opts) {
       open = new Set();
       keep = null;
       query = '';
+      matches = [];
+      matchSet = new Set();
+      current = null;
       selected = null;
       if (typeof depth === 'number') openToDepth(depth);
       draw();
@@ -555,6 +570,32 @@ export function createTree(opts) {
       return true;
     },
     searchHits: () => hits,
+    matchCount: () => matches.length,
+    /**
+     * Step to the nth match: bring its row into view, mark it as the one being
+     * looked at, and select it. The index wraps, so Enter at the last match
+     * comes back round to the first.
+     *
+     * A match can be on the far side of a "Show N more" batch, which is what
+     * `want` is for: the same mechanism reveal() uses to paint far enough.
+     */
+    focusMatch(i) {
+      if (!matches.length) return -1;
+      const at = ((i % matches.length) + matches.length) % matches.length;
+      const target = matches[at];
+      const find = () => [...host.querySelectorAll('.jnode')].find(w => w._node && w._node.pathKey === target);
+      current = target;
+      if (!find()) { want = target; draw(); want = null; }
+      else host.querySelectorAll('.jrow.hit-now').forEach(r => r.classList.remove('hit-now'));
+      const wrap = find();
+      if (!wrap) return at;
+      const row = wrap.querySelector(':scope > .jrow');
+      if (!row) return at;
+      row.classList.add('hit-now');
+      select(wrap._node, row);
+      if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+      return at;
+    },
     query: () => query,
     redraw: draw,
     /* Editing the root itself replaces it in the box, so the view reads it back. */

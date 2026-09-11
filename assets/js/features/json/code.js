@@ -10,7 +10,7 @@
  * as-is: a million-node document is still readable, and still opens at once.
  */
 import { JSON_CODE_MAX } from '../../core/config.js';
-import { el } from '../../core/dom.js';
+import { el, markInto } from '../../core/dom.js';
 import { tokenize } from './model.js';
 
 /**
@@ -48,7 +48,7 @@ export function renderCode(host, text, highlight) {
       if (tok.kind === 'space' || tok.kind === 'punct') {
         if (needle && tok.text.toLowerCase().includes(needle)) {
           const holder = el('span');
-          marks += paintMarks(holder, tok.text, needle);
+          marks += markInto(holder, tok.text, needle, 'jc-hit');
           frag.appendChild(holder);
         } else {
           frag.appendChild(document.createTextNode(tok.text));
@@ -57,7 +57,7 @@ export function renderCode(host, text, highlight) {
       }
       const span = el('span', 'jc-' + tok.kind);
       if (needle && tok.text.toLowerCase().includes(needle)) {
-        marks += paintMarks(span, tok.text, needle);
+        marks += markInto(span, tok.text, needle, 'jc-hit');
       } else {
         span.textContent = tok.text;
       }
@@ -68,18 +68,4 @@ export function renderCode(host, text, highlight) {
 
   host.append(gutter, code);
   return { lines, coloured, marks };
-}
-
-/** Split one token around every occurrence of the search term. */
-function paintMarks(span, text, needle) {
-  const low = text.toLowerCase();
-  let at = 0, found = 0, next;
-  while ((next = low.indexOf(needle, at)) !== -1) {
-    if (next > at) span.appendChild(document.createTextNode(text.slice(at, next)));
-    span.appendChild(el('mark', 'jc-hit', text.slice(next, next + needle.length)));
-    at = next + needle.length;
-    found++;
-  }
-  if (at < text.length) span.appendChild(document.createTextNode(text.slice(at)));
-  return found;
 }

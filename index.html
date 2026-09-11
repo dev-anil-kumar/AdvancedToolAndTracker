@@ -325,7 +325,9 @@
 
       <input class="jfind" id="jSearch" type="search" autocomplete="off" spellcheck="false"
              placeholder="Find a key or value…" aria-label="Find a key or value in this document">
-      <span class="jmeta" id="jHits"></span>
+      <button class="btn tiny ghost jstep" id="jPrev" type="button" title="Previous match (⇧⏎)" aria-label="Previous match">↑</button>
+      <button class="btn tiny ghost jstep" id="jNext" type="button" title="Next match (⏎)" aria-label="Next match">↓</button>
+      <span class="jmeta" id="jHits" aria-live="polite"></span>
 
       <button class="btn tiny ghost" id="jExpand" type="button" title="Open every branch">Expand</button>
       <button class="btn tiny ghost" id="jCollapse" type="button" title="Close every branch">Collapse</button>

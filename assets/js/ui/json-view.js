@@ -48,6 +48,7 @@ let mode = 'tree';
 let unwrapped = false;
 let saveTimer = null;
 let saved = true;
+let at = -1;               // which match the reader has stepped to, -1 for none
 let picks = [];            // the arrays the table view can show
 let pickedTable = 0;
 let info = null;           // node counts, worked out once per value
@@ -86,6 +87,7 @@ function load(source) {
   value = res.ok ? res.value : null;
   problem = res.ok ? null : res;
   stream = res.stream || 0;
+  at = -1;
   pickedTable = 0;
   derive();
   pickedTable = biggestTable();
@@ -163,6 +165,7 @@ export function setMode(next) {
   if (!JSON_MODES.some(m => m.key === next)) return;
   if (mode === 'edit' && next !== 'edit') commitSource();
   mode = next;
+  at = -1;                       // the nth match of one surface is not the nth of another
   render();
 }
 
@@ -355,6 +358,74 @@ export async function flushJson() {
 
 const query = () => $('#jSearch').value.trim();
 
+/* ---------- Stepping through the matches ---------- */
+
+/**
+ * Find is one box, and every surface answers it — so stepping has to work on
+ * all of them too. Each view knows how many matches it has and how to bring
+ * the nth into view; this is only the arithmetic between them, which is the
+ * same everywhere: wrap at both ends, so the last match leads back to the
+ * first and Up from the first lands on the last.
+ */
+function findTotal() {
+  if (docId === null || !query()) return 0;
+  if (mode === 'tree') return value === null ? 0 : tree.matchCount();
+  if (mode === 'graph') return value === null ? 0 : graph.matchCount();
+  if (mode === 'table') return table.matchCount();
+  if (mode === 'code') return painted.codeInfo ? painted.codeInfo.marks : 0;
+  if (mode === 'edit') return sourceMatches().length;
+  return 0;
+}
+
+/** Where the search term sits in the source text, in order. */
+function sourceMatches() {
+  const needle = query().toLowerCase();
+  if (!needle) return [];
+  const hay = $('#jEditArea').value.toLowerCase();
+  const found = [];
+  let from = 0, next;
+  while ((next = hay.indexOf(needle, from)) !== -1) { found.push(next); from = next + needle.length; }
+  return found;
+}
+
+function focusMatch() {
+  if (at < 0) return;
+  if (mode === 'tree') { tree.focusMatch(at); return; }
+  if (mode === 'graph') { graph.focusMatch(at); return; }
+  if (mode === 'table') { table.focusMatch(at); return; }
+  if (mode === 'code') {
+    const marks = $$('#jCodeHost mark.jc-hit');
+    marks.forEach(m => m.classList.remove('hit-now'));
+    const one = marks[at];
+    if (!one) return;
+    one.classList.add('hit-now');
+    if (typeof one.scrollIntoView === 'function') one.scrollIntoView({ block: 'center' });
+    return;
+  }
+  if (mode === 'edit') {
+    const spots = sourceMatches();
+    const area = $('#jEditArea');
+    const start = spots[at];
+    if (start === undefined) return;
+    /* The caret is the only highlight a textarea has, so put it on the match
+       and leave the focus in the find box — otherwise Enter would stop
+       stepping the moment it worked. */
+    area.setSelectionRange(start, start + query().length);
+    const line = area.value.slice(0, start).split('\n').length - 1;
+    const step = parseFloat(getComputedStyle(area).lineHeight) || 20;
+    area.scrollTop = Math.max(0, (line - 4) * step);
+  }
+}
+
+/** Step to the next match, or the previous one. Both ends wrap. */
+function stepFind(delta) {
+  const total = findTotal();
+  if (!total) { at = -1; syncToolbar(); return; }
+  at = at < 0 ? (delta > 0 ? 0 : total - 1) : (((at + delta) % total) + total) % total;
+  focusMatch();
+  syncToolbar();
+}
+
 function showProblem() {
   const banner = $('#jError');
   if (!problem) { banner.hidden = true; return; }
@@ -417,6 +488,9 @@ function syncToolbar() {
   showIf('jSearch', open && mode !== 'raw');
   if (open && mode === 'graph') $('#jZoom').textContent = Math.round(graph.zoomLevel() * 100) + '%';
   showIf('jHits', open && mode !== 'raw');
+  const steps = open && mode !== 'raw' && findTotal() > 0;
+  showIf('jPrev', steps);
+  showIf('jNext', steps);
   showIf('jCopy', open);
   showIf('jExport', open);
   showIf('jRemove', open);
@@ -455,10 +529,15 @@ function statusLine() {
 function hitLine() {
   const q = query();
   if (!q || docId === null) return '';
-  if (mode === 'table') return plural(table.shownCount(), 'row', 'rows');
-  if (mode === 'code') return painted.codeInfo ? plural(painted.codeInfo.marks, 'match', 'matches') : '';
+  const total = findTotal();
+  /* "3 of 10" once you are stepping, the plain count until then — the position
+     is noise before it means anything. */
+  const where = (n, one, many) => (n ? (at >= 0 ? (at + 1) + ' of ' + n + ' ' + (n === 1 ? one : many) : plural(n, one, many)) : '');
+  if (mode === 'table') return total ? where(total, 'row', 'rows') : 'no rows';
+  if (mode === 'edit') return total ? where(total, 'match', 'matches') : 'no matches';
+  if (mode === 'code') return painted.codeInfo ? (total ? where(total, 'match', 'matches') : 'no matches') : '';
   const outline = mode === 'tree' ? tree : mode === 'graph' ? graph : null;
-  if (outline) return outline.searchHits() ? plural(outline.searchHits(), 'match', 'matches') : 'no matches';
+  if (outline) return outline.searchHits() ? where(total, 'match', 'matches') : 'no matches';
   return '';
 }
 
@@ -551,6 +630,7 @@ function closeCurrent() {
   value = null;
   problem = null;
   stream = 0;
+  at = -1;
   picks = [];
   info = null;
   invalidate();
@@ -577,20 +657,36 @@ $('#jName').addEventListener('change', () => {
 });
 
 let findTimer = null;
+let findPending = false;
+function runFind() {
+  findPending = false;
+  if (docId === null) return;
+  at = -1;                       // a new term starts again from the top
+  if (mode === 'tree' && value !== null) tree.search(query());
+  if (mode === 'graph' && value !== null) graph.search(query());
+  if (mode === 'table') table.setFilter(query());
+  if (mode === 'code') { painted.code = false; paintCode(); }
+  syncToolbar();
+}
 $('#jSearch').addEventListener('input', () => {
   clearTimeout(findTimer);
-  findTimer = setTimeout(() => {
-    if (docId === null) return;
-    if (mode === 'tree' && value !== null) tree.search(query());
-    if (mode === 'graph' && value !== null) graph.search(query());
-    if (mode === 'table') table.setFilter(query());
-    if (mode === 'code') { painted.code = false; paintCode(); }
-    syncToolbar();
-  }, 160);
+  findPending = true;
+  findTimer = setTimeout(runFind, 160);
 });
 $('#jSearch').addEventListener('keydown', e => {
-  if (e.key === 'Escape') { $('#jSearch').value = ''; $('#jSearch').dispatchEvent(new Event('input')); }
+  if (e.key === 'Escape') { $('#jSearch').value = ''; $('#jSearch').dispatchEvent(new Event('input')); return; }
+  /* Enter steps forward and ⇧Enter back, which is what every find box does;
+     the arrows do the same, so a hand already on them need not move. */
+  if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    /* Enter can arrive inside the typing debounce; the search the reader is
+       stepping through has to be the one they finished typing. */
+    if (findPending) { clearTimeout(findTimer); runFind(); }
+    stepFind(e.key === 'ArrowUp' || (e.key === 'Enter' && e.shiftKey) ? -1 : 1);
+  }
 });
+$('#jPrev').addEventListener('click', () => stepFind(-1));
+$('#jNext').addEventListener('click', () => stepFind(1));
 
 $('#jExpand').addEventListener('click', () => {
   if (value === null) return;

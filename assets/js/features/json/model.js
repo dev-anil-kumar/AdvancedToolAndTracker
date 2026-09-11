@@ -335,6 +335,10 @@ export function childrenOf(value, segments) {
  * every ancestor of one. Bounded twice over — by hits and by nodes walked —
  * so a search on a very large document answers rather than hangs.
  *
+ * `matches` is the matching paths alone, in document order — which is the
+ * order the tree, the graph and the code view all show them in, and so the
+ * order stepping from one to the next has to follow.
+ *
  * Shared, because the tree and the graph must agree on what a match is.
  */
 export function matchPaths(root, query, opts) {
@@ -343,8 +347,9 @@ export function matchPaths(root, query, opts) {
   let budget = options.budget || 400000;
   const needle = String(query || '').trim().toLowerCase();
   const paths = new Set();
+  const matches = [];
   let hits = 0;
-  if (!needle) return { paths: null, hits: 0 };
+  if (!needle) return { paths: null, hits: 0, matches };
   const test = (v) => String(v).toLowerCase().includes(needle);
 
   (function walk(value, segments, trail) {
@@ -355,7 +360,9 @@ export function matchPaths(root, query, opts) {
     const leafHit = !branch && test(value === null ? 'null' : value);
     if (keyHit || leafHit) {
       hits++;
-      paths.add(pathKey(segments));
+      const key = pathKey(segments);
+      paths.add(key);
+      matches.push(key);
       trail.forEach(p => paths.add(p));
     }
     if (!branch) return;
@@ -363,7 +370,7 @@ export function matchPaths(root, query, opts) {
     children.forEach(child => walk(child.value, child.segments, nextTrail));
   })(root, [], []);
 
-  return { paths, hits };
+  return { paths, hits, matches };
 }
 
 /** JavaScript accessor notation, so a copied path can be pasted into code. */

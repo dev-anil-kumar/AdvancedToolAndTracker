@@ -296,7 +296,14 @@ distinction a reader of unfamiliar data needs.
     escapes.
   - **Find** — one box, and each view answers it in its own way: the tree and the graph
     filter down to the matches and their ancestors, the table filters rows, the code view
-    marks them. What counts as a match is decided in one place, so the views agree.
+    marks them, and the source pane selects them. What counts as a match is decided in one
+    place, so the views agree.
+    The term itself is highlighted wherever it was found — a match you have to hunt for
+    inside the row that matched is only half an answer. <kbd>↵</kbd> steps to the next one
+    and <kbd>⇧↵</kbd> to the previous, as do the arrows beside the box and <kbd>↑</kbd>/
+    <kbd>↓</kbd> while the box has focus; both ends wrap, so the last leads back to the
+    first. The one you are on is coloured apart from the others, and the counter reads
+    *3 of 10* rather than just *10*.
   - **Editing without spoiling the reading** — the tree grows no controls at all until
     *Edit values* is switched on. Then a click edits a value, a double-click renames a
     key, and `+`/`×` add and remove entries; what you type is read as JSON if it parses

@@ -13,7 +13,7 @@
  * Rows arrive in batches, and a row is only flattened when it is painted.
  */
 import { TABLE_CHUNK } from '../../core/config.js';
-import { el } from '../../core/dom.js';
+import { el, markInto } from '../../core/dom.js';
 import { childCount, columnsOf, compareCells, flattenRow, isBranch, peek, typeOf } from './model.js';
 
 export function createTable(opts) {
@@ -28,6 +28,9 @@ export function createTable(opts) {
   let filter = '';
   let shown = 0;
   let view = [];
+  let current = -1;                              // the matching row being stepped to
+  let body = null;                               // the tbody on screen
+  let paintMore = null;                          // paints the next batch into it
 
   /** Flattening is not free, so each row is done once and kept. */
   function fieldsOf(i) {
@@ -90,6 +93,7 @@ export function createTable(opts) {
     table.appendChild(thead);
 
     const tbody = el('tbody');
+    body = tbody;
     table.appendChild(tbody);
     scroller.appendChild(table);
     host.appendChild(scroller);
@@ -113,11 +117,13 @@ export function createTable(opts) {
       more.hidden = left <= 0;
       more.textContent = 'Show ' + Math.min(left, TABLE_CHUNK) + ' more — ' + left + ' left';
     }
+    paintMore = paintRows;
     paintRows();
   }
 
   function rowFor(i) {
     const tr = el('tr');
+    if (view[current] === i) tr.classList.add('hit-now');
     tr.appendChild(el('td', 'jt-n', String(i)));
     const fields = fieldsOf(i);
     cols.forEach(label => tr.appendChild(cellFor(fields.get(label), i, label)));
@@ -148,7 +154,9 @@ export function createTable(opts) {
       }
       return td;
     }
-    const span = el('span', 'jlit ' + t, peek(value, 160));
+    const span = el('span', 'jlit ' + t);
+    const shownText = peek(value, 160);
+    if (markInto(span, shownText, filter.trim())) td.classList.add('hit');
     if (t === 'string' && String(value).length > 60) td.title = String(value).slice(0, 4000);
     td.appendChild(span);
     return td;
@@ -164,9 +172,32 @@ export function createTable(opts) {
       order = { col: null, dir: 1 };
       apply();
     },
-    setFilter(text) { filter = String(text || ''); apply(); },
+    setFilter(text) { filter = String(text || ''); current = -1; apply(); },
     shownCount: () => view.length,
+    matchCount: () => (filter.trim() ? view.length : 0),
+    /**
+     * Step to the nth matching row, wrapping round. Rows arrive in batches, so
+     * one further down than has been painted is painted first — a match you
+     * cannot scroll to is not a match you can read.
+     */
+    focusMatch(i) {
+      if (!view.length) return -1;
+      const at = ((i % view.length) + view.length) % view.length;
+      current = at;
+      while (shown <= at && paintMore) paintMore();
+      if (!body) return at;
+      body.querySelectorAll('tr.hit-now').forEach(tr => tr.classList.remove('hit-now'));
+      const tr = body.children[at];
+      if (!tr) return at;
+      tr.classList.add('hit-now');
+      if (typeof tr.scrollIntoView === 'function') tr.scrollIntoView({ block: 'center' });
+      return at;
+    },
     columnCount: () => cols.length,
-    clear() { rows = []; cols = []; view = []; flat = new Map(); host.innerHTML = ''; }
+    clear() {
+      rows = []; cols = []; view = []; flat = new Map();
+      current = -1; body = null; paintMore = null;
+      host.innerHTML = '';
+    }
   };
 }

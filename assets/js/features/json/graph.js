@@ -68,6 +68,9 @@ export function createGraph(opts) {
   let fanout = new Map();          // path → how many children it is showing
   let keep = null;                 // paths a search left visible, or null
   let hits = 0;
+  let matches = [];                // matching paths, in the order the map shows them
+  let matchSet = new Set();
+  let current = null;              // the match being stepped to
   let selected = null;
   let drawn = { nodes: [], links: [], bounds: null, stopped: false };
   let zoom = 1;
@@ -193,7 +196,8 @@ export function createGraph(opts) {
     const item = rec.item;
     const t = typeOf(item.value);
     const g = svgEl('g', {
-      class: 'jg-node' + (rec.embed ? ' embed' : '') + (selected === rec.key ? ' sel' : ''),
+      class: 'jg-node' + (rec.embed ? ' embed' : '') + (selected === rec.key ? ' sel' : '')
+        + (matchSet.has(rec.key) ? ' hit' : '') + (current === rec.key ? ' hit-now' : ''),
       transform: 'translate(' + rec.x + ' ' + rec.y + ')',
       'data-type': rec.embed ? 'embed' : t,
       'data-depth': rec.depth,
@@ -452,6 +456,9 @@ export function createGraph(opts) {
       fanout = new Map();
       keep = null;
       hits = 0;
+      matches = [];
+      matchSet = new Set();
+      current = null;
       selected = null;
       if (typeof depth === 'number') openToDepth(depth);
       draw();
@@ -466,12 +473,29 @@ export function createGraph(opts) {
       const found = matchPaths(rootValue, text);
       keep = found.paths;
       hits = found.hits;
+      matches = found.matches;
+      matchSet = new Set(matches);
+      current = null;
       if (keep) open = new Set([...keep]);
       draw();
       fit();
       return hits;
     },
     searchHits: () => hits,
+    matchCount: () => matches.length,
+    /** Step to the nth match: centre the map on it and mark it. Wraps round. */
+    focusMatch(i) {
+      if (!matches.length) return -1;
+      const at = ((i % matches.length) + matches.length) % matches.length;
+      current = matches[at];
+      draw();
+      const found = drawn.nodes.find(n => n.key === current);
+      if (found) {
+        centre = { x: found.x + GRAPH_NODE_W / 2, y: found.y + GRAPH_NODE_H / 2 };
+        applyView();
+      }
+      return at;
+    },
     /** Open the path to a value and centre the map on it. */
     reveal(segments) {
       keep = null;
