@@ -78,6 +78,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5C7 4.5 7.5 9.2 5 12c2.5 2.8 2 7.5 4.5 7.5"/><path d="M14.5 4.5c2.5 0 2 4.7 4.5 7.5-2.5 2.8-2 7.5-4.5 7.5"/></svg>
           Open JSON
         </button>
+        <button class="btn" id="qJsonPaste" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2.2"/><path d="M9 3.5h6v2.2H9z"/><path d="M10.5 11.5 9 13.5l1.5 2M13.5 11.5 15 13.5l-1.5 2"/></svg>
+          Paste JSON
+        </button>
         <button class="btn" id="qCompare" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="7.5" height="15" rx="1.6"/><rect x="13.5" y="4.5" width="7.5" height="15" rx="1.6"/><path d="M12 3v18"/></svg>
           Compare files
@@ -497,7 +501,7 @@
 <input type="file" id="fileInput" class="sr" multiple
        accept=".md,.markdown,.mdown,.mkd,.mdwn,.txt,.text,.pdf,.xlsx,.xlsm,.xlsb,.xls,.csv,.tsv,.ods,text/markdown,text/plain,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet">
 <input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
-<input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.txt,application/json,text/plain" class="sr" multiple>
+<input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.jsonl,.txt,application/json,text/plain" class="sr" multiple>
 <input type="file" id="compareInput" class="sr" multiple>
 <input type="file" id="noteImageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif" class="sr" multiple>
 
@@ -640,7 +644,8 @@
   <div class="dlg-head">
     <h2 id="jsonDlgTitle">Paste JSON</h2>
     <p>Kept in your library like any other document. It does not have to be valid — the edit
-       pane will show you where it breaks.</p>
+       pane will show you where it breaks. Several documents one after another, or a
+       <code>.jsonl</code> log, are read as one list.</p>
   </div>
   <form class="dlg-body" id="jsonForm">
     <label class="field-label" for="jsonTitle">Title <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>

@@ -1816,6 +1816,40 @@ jsonMode('code');
 await wait(100);
 ok('the code view still shows the broken text', /nope/.test(q('.jc-code').textContent));
 
+section('json: several documents pasted at once');
+const twoBodies = '{\n  "queries": ["a"],\n  "db_version": 106\n}\n{\n  "queries": ["b"],\n  "db_version": 107\n}\n';
+await pasteJson('Two bodies', twoBodies);
+ok('two whole documents are read rather than refused', q('#jError').hidden, q('#jStats').textContent);
+ok('they arrive as a list', /2 documents read as a list/.test(q('#jStats').textContent),
+  q('#jStats').textContent);
+jsonMode('table');
+await wait(150);
+ok('and tabulate as two rows', qa('#jTableHost tbody tr').length === 2,
+  qa('#jTableHost tbody tr').length + ' rows');
+ok('keeping each document’s fields', /107/.test(q('#jTableHost').textContent));
+
+await pasteJson('Lines', '{"n":1}\n{"n":2}\n{"n":3}\n');
+ok('a .jsonl-shaped paste is read the same way', /3 documents read as a list/.test(q('#jStats').textContent),
+  q('#jStats').textContent);
+
+await pasteJson('Trailing rubbish', '{"a":1}{"b":2} oops');
+ok('but leftover text is still a syntax error, not a list',
+  !q('#jError').hidden && /Invalid JSON/.test(q('#jError').textContent),
+  q('#jError').textContent.slice(0, 60));
+
+section('json: pasting from Home');
+click(q('#tab-home'));
+await wait(60);
+click(q('#qJsonPaste'));
+await wait(60);
+ok('Home has a way in to pasted JSON', q('#jsonDlg').hasAttribute('open') || q('#jsonDlg').open);
+q('#jsonTitle').value = 'From Home';
+q('#jsonText').value = '{"straight":"in"}';
+submit(q('#jsonForm'));
+await wait(150);
+ok('and it opens the JSON view', shownViews() === 'view-json', shownViews());
+ok('on the document just pasted', q('#jName').value === 'From Home', q('#jName').value);
+
 section('json: opening from a URL');
 const jsonRequested = [];
 const previousFetch = window.fetch;

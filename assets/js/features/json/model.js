@@ -47,6 +47,11 @@ export function parse(text) {
   try {
     return { ok: true, value: JSON.parse(src) };
   } catch (err) {
+    /* Several whole documents, one after another — a log of request bodies, a
+       .jsonl file, two things pasted in together. Each is valid on its own, so
+       reading them as one array is far more use than refusing the lot. */
+    const many = parseStream(src);
+    if (many) return many;
     const msg = String((err && err.message) || err);
     const said = msg.match(/position (\d+)/);
     const index = said ? Number(said[1]) : locate(src);
@@ -56,12 +61,11 @@ export function parse(text) {
 }
 
 /**
- * The offset of the first character that breaks the grammar, or -1 if the text
- * is in fact valid JSON. A plain recursive-descent scan: it builds nothing and
- * keeps nothing, so it costs one pass and is only ever run on text that has
- * already failed to parse.
+ * A scanner over the JSON grammar. `value()` advances past one value and
+ * `fail()` throws the offset it stopped at — everything that needs to know
+ * where a document ends, or where it breaks, is built on this one pass.
  */
-function locate(src) {
+function scanner(src) {
   const n = src.length;
   let i = 0;
   const fail = () => { throw i; };
@@ -139,14 +143,54 @@ function locate(src) {
     num();
   }
 
+  return { value, ws, fail, at: () => i };
+}
+
+/**
+ * The offset of the first character that breaks the grammar, or -1 if the text
+ * is in fact valid JSON. A plain recursive-descent scan: it builds nothing and
+ * keeps nothing, so it costs one pass and is only ever run on text that has
+ * already failed to parse.
+ */
+function locate(src) {
+  const s = scanner(src);
   try {
-    value();
-    ws();
-    if (i < n) fail();
+    s.value();
+    s.ws();
+    if (s.at() < src.length) s.fail();
     return -1;
   } catch (at) {
-    return typeof at === 'number' ? at : Math.min(i, n);
+    return typeof at === 'number' ? at : Math.min(s.at(), src.length);
   }
+}
+
+/**
+ * Whole documents laid end to end, read as one array.
+ *
+ * Only claimed when the text is *nothing but* two or more complete values —
+ * anything left over means this was one broken document rather than several
+ * whole ones, and the reader is better served by the syntax error.
+ */
+function parseStream(src) {
+  const s = scanner(src);
+  const spans = [];
+  try {
+    for (;;) {
+      s.ws();
+      if (s.at() >= src.length) break;
+      const start = s.at();
+      s.value();
+      spans.push([start, s.at()]);
+    }
+  } catch (broken) {
+    return null;
+  }
+  if (spans.length < 2) return null;
+  const value = [];
+  for (const [from, to] of spans) {
+    try { value.push(JSON.parse(src.slice(from, to))); } catch (err) { return null; }
+  }
+  return { ok: true, value, stream: spans.length };
 }
 
 /** A character offset, as a 1-based line and column. */

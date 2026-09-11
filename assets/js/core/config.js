@@ -41,7 +41,7 @@ export const FILE_KINDS = {
   markdown: ['md', 'markdown', 'mdown', 'mkd', 'mdwn', 'txt', 'text'],
   pdf: ['pdf'],
   sheet: ['xlsx', 'xlsm', 'xlsb', 'xls', 'csv', 'tsv', 'ods'],
-  json: ['json', 'jsonc', 'geojson', 'ndjson']
+  json: ['json', 'jsonc', 'geojson', 'ndjson', 'jsonl']
 };
 
 /* ---------- Limits ---------- */

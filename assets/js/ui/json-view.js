@@ -43,6 +43,7 @@ let docId = null;          // the record being read
 let text = '';             // its source, as edited
 let value = null;          // the parsed value, or null while broken
 let problem = null;        // { error, line, column } while broken
+let stream = 0;            // how many documents were laid end to end, if several
 let mode = 'tree';
 let unwrapped = false;
 let saveTimer = null;
@@ -84,6 +85,7 @@ function load(source) {
   const res = parse(text);
   value = res.ok ? res.value : null;
   problem = res.ok ? null : res;
+  stream = res.stream || 0;
   pickedTable = 0;
   derive();
   pickedTable = biggestTable();
@@ -272,6 +274,7 @@ function commitSource() {
   const res = parse(text);
   value = res.ok ? res.value : null;
   problem = res.ok ? null : res;
+  stream = res.stream || 0;
   derive();
   const keepEdit = painted.edit;
   invalidate();
@@ -291,6 +294,7 @@ function applySource(next, label) {
   const res = parse(text);
   value = res.ok ? res.value : null;
   problem = res.ok ? null : res;
+  stream = res.stream || 0;
   derive();
   invalidate();
   $('#jEditArea').value = text;
@@ -312,6 +316,8 @@ function needValue() {
 function afterTreeEdit() {
   value = tree.root();
   text = pretty(value, JSON_INDENT);
+  /* Whatever it arrived as, it is one document now. */
+  stream = 0;
   derive();
   const keepTree = painted.tree;
   invalidate();
@@ -427,6 +433,9 @@ function statusLine() {
   if (value === null || !info) { bits.push('unparsed'); return bits.join(' · '); }
   bits.push(plural(info.nodes, 'node', 'nodes') + (info.partial ? '+' : ''));
   bits.push(info.depth + ' deep');
+  /* Several whole documents pasted in together: say so, or the array they are
+     being read as looks like something the reader did not write. */
+  if (stream) bits.push(plural(stream, 'document', 'documents') + ' read as a list');
   if (mode === 'table') {
     const chosen = picks[pickedTable];
     if (chosen) bits.push(plural(chosen.rows, 'row', 'rows') + ' × ' + table.columnCount() + ' cols');
@@ -541,6 +550,7 @@ function closeCurrent() {
   $('#jEditArea').value = '';
   value = null;
   problem = null;
+  stream = 0;
   picks = [];
   info = null;
   invalidate();
@@ -728,6 +738,7 @@ $('#jsonUrlForm').addEventListener('submit', async e => {
   }
 });
 $('#jPaste').addEventListener('click', promptJson);
+$('#qJsonPaste').addEventListener('click', promptJson);
 $('#jsonEmptyPaste').addEventListener('click', promptJson);
 $('#pasteJsonLink').addEventListener('click', promptJson);
 $('#jUrl').addEventListener('click', promptJsonUrl);

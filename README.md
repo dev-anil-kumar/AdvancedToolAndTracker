@@ -255,9 +255,9 @@ distinction a reader of unfamiliar data needs.
   - Rectangle is the tool a fresh canvas starts on: open one and drag.
   - Autosaves; exports `.json` (lossless, re-importable), `.svg` or `.png`; imports by
     button or by dropping a file on the canvas.
-- **JSON** — open a `.json` file, paste it, or fetch a URL; it lands in the library like
-  any other document. Six ways to look at the same data, switched with the segmented
-  control, <kbd>1</kbd>–<kbd>6</kbd>, or <kbd>[</kbd> and <kbd>]</kbd>:
+- **JSON** — open a `.json` file, paste it (from Home or the JSON view), or fetch a URL;
+  it lands in the library like any other document. Six ways to look at the same data,
+  switched with the segmented control, <kbd>1</kbd>–<kbd>6</kbd>, or <kbd>[</kbd> and <kbd>]</kbd>:
   - **Tree** — collapsible and coloured by type, with a summary beside every closed
     branch. Children are built when a branch opens and long arrays arrive 200 at a time,
     so a three-megabyte dump opens instantly. Real `tree`/`treeitem` roles and arrow-key
@@ -284,6 +284,11 @@ distinction a reader of unfamiliar data needs.
   - **Edit** — a source pane that says what broke and on which line, then puts the caret
     there. V8 stopped reporting a character position in 2023, so Folio finds it itself.
     *Format*, *Minify* and *Sort keys* rewrite the source in place.
+  - **Several documents at once** — request logs and `.jsonl` files arrive as whole
+    documents laid end to end, each valid on its own but not together. Folio reads them
+    as one list rather than refusing the lot, and says how many it found in the status
+    line. Only when the text is *nothing but* complete documents: anything left over is
+    one broken document, and you get the syntax error instead.
   - **JSON inside a string** — a field like `"queue": "[{\"callState\":\"STARTED\"}]"` is
     recognised as the document it is and expands like any other branch, however many
     times it is nested. Editing a value inside one is written back out through the

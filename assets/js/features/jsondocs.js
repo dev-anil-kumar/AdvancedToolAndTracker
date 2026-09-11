@@ -106,6 +106,6 @@ export async function loadJsonFromUrl(rawInput) {
     const seg = new URL(url, location.href).pathname.split('/').filter(Boolean).pop();
     if (seg) name = decodeURIComponent(seg);
   } catch (e) { /* fall through to a derived name */ }
-  if (!/\.(json|jsonc|geojson|ndjson|txt)$/i.test(name)) name = deriveJsonName(text);
+  if (!/\.(json|jsonc|geojson|ndjson|jsonl|txt)$/i.test(name)) name = deriveJsonName(text);
   return addJsonDoc({ name, kind: 'url', source: url, text });
 }
