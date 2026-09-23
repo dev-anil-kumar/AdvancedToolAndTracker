@@ -22,6 +22,10 @@
 <link rel="stylesheet" href="./assets/css/canvas.css">
 <link rel="stylesheet" href="./assets/css/json.css">
 <link rel="stylesheet" href="./assets/css/compare.css">
+<link rel="stylesheet" href="./assets/css/write.css">
+<link rel="stylesheet" href="./assets/css/write-media.css">
+<link rel="stylesheet" href="./assets/css/write-pages.css">
+<link rel="stylesheet" href="./assets/css/write-io.css">
 <link rel="stylesheet" href="./assets/css/responsive.css">
 
 </head>
@@ -34,6 +38,7 @@
     <button role="tab" id="tab-home" aria-selected="true" aria-controls="view-home" tabindex="0">Home</button>
     <button role="tab" id="tab-read" aria-selected="false" aria-controls="view-read" tabindex="-1">Reading <span class="n" id="tabReadN"></span></button>
     <button role="tab" id="tab-notes" aria-selected="false" aria-controls="view-notes" tabindex="-1">Notes <span class="n" id="tabNotesN"></span></button>
+    <button role="tab" id="tab-write" aria-selected="false" aria-controls="view-write" tabindex="-1">Write <span class="n" id="tabWriteN"></span></button>
     <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="view-canvas" tabindex="-1">Canvas <span class="n" id="tabCanvasN"></span></button>
     <button role="tab" id="tab-json" aria-selected="false" aria-controls="view-json" tabindex="-1">JSON <span class="n" id="tabJsonN"></span></button>
     <button role="tab" id="tab-compare" aria-selected="false" aria-controls="view-compare" tabindex="-1">Compare <span class="n" id="tabCompareN"></span></button>
@@ -74,6 +79,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19.5V6a2 2 0 0 1 2-2h7l5 5v10.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19.5Z"/><path d="M13.5 4v5.5H19"/><path d="M9 14h5M9 17h3"/></svg>
           Write a note
         </button>
+        <button class="btn" id="qWrite" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h9l3.5 3.5v11.5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1Z"/><path d="M8.5 12.5h7M8.5 16h4.5"/></svg>
+          New document
+        </button>
         <button class="btn" id="qJson" type="button">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5C7 4.5 7.5 9.2 5 12c2.5 2.8 2 7.5 4.5 7.5"/><path d="M14.5 4.5c2.5 0 2 4.7 4.5 7.5-2.5 2.8-2 7.5-4.5 7.5"/></svg>
           Open JSON
@@ -105,6 +114,15 @@
           <button class="link" id="importDrawing" type="button">Import a drawing</button>
         </div>
         <ul class="rows" id="drawingRows"></ul>
+      </section>
+
+      <section class="sec" id="secWriting" hidden>
+        <div class="sec-head">
+          <span class="sec-title">Writing</span>
+          <span class="sec-count" id="writingCount"></span>
+          <button class="link" id="newWriteLink" type="button">New document</button>
+        </div>
+        <ul class="rows" id="writeHomeRows"></ul>
       </section>
 
       <section class="sec" id="secJson" hidden>
@@ -244,6 +262,63 @@
       </div>
     </div>
   </section>
+  <!-- ================= WRITE ================= -->
+  <section class="view" role="tabpanel" id="view-write" aria-labelledby="tab-write" tabindex="0" hidden>
+    <div class="write-shell">
+      <aside class="write-rail" id="writeRail">
+        <div class="write-rail-head">
+          <label class="sr" for="writeFilter">Filter documents</label>
+          <input class="write-filter" id="writeFilter" type="search" autocomplete="off" spellcheck="false" placeholder="Filter…">
+          <button class="btn tiny ghost" id="writeOpenFile" type="button" title="Open a file (⌘O)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v9m0 0-3.3-3.3M12 13l3.3-3.3M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></svg>
+          </button>
+          <button class="btn tiny primary" id="writeNew" type="button" title="New document">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <ul class="write-rows" id="writeRows"></ul>
+      </aside>
+
+      <div class="write-main">
+        <div class="write-toolbar" id="writeToolbar" role="toolbar" aria-label="Formatting" hidden></div>
+
+        <div class="write-scroll" id="writeScroll">
+          <div class="write-page" id="writePage" data-page-style="blank" data-tint="white" data-width="normal">
+            <div class="write-sheet" id="writeSheet" contenteditable="true" spellcheck="true" aria-label="Document" role="textbox" aria-multiline="true"></div>
+          </div>
+        </div>
+
+        <div class="write-status" id="writeStatus" hidden>
+          <span id="writeWords"></span>
+          <span id="writeChars"></span>
+          <span id="writeReadTime"></span>
+          <div class="spacer"></div>
+          <span class="saved" id="writeSaved"></span>
+        </div>
+      </div>
+
+      <aside class="write-outline" id="writeOutline" hidden>
+        <div class="write-outline-head">
+          <span>Outline</span>
+          <button class="btn tiny ghost" id="writeOutlineClose" type="button">Close</button>
+        </div>
+        <ul id="writeOutlineRows"></ul>
+      </aside>
+    </div>
+
+    <div class="write-bubble" id="writeBubble" hidden role="toolbar" aria-label="Selection"></div>
+    <div class="write-slash" id="writeSlash" hidden role="listbox" aria-label="Insert a block"></div>
+
+    <div class="write-empty" id="writeEmpty">
+      <div class="box">
+        <h2>Nothing written yet</h2>
+        <p>A calm page for anything longer than a note: headings, lists, tables, quotes — everything
+           formats as you type, and it's saved in this browser as you go.</p>
+        <button class="btn primary" id="writeEmptyNew" type="button">New document</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= CANVAS ================= -->
   <section class="view" role="tabpanel" id="view-canvas" aria-labelledby="tab-canvas" tabindex="0" hidden>
     <div class="ctoolbar">
@@ -588,6 +663,17 @@
     <p>Everything the canvas can do, on one page.</p>
   </div>
   <div class="dlg-body keys" id="shortcutsBody"></div>
+  <div class="dlg-acts" style="padding: 0 20px 18px">
+    <button class="btn" type="button" data-close>Close</button>
+  </div>
+</dialog>
+
+<dialog id="writeShortcutsDlg" aria-labelledby="writeShortcutsTitle">
+  <div class="dlg-head">
+    <h2 id="writeShortcutsTitle">Write shortcuts</h2>
+    <p>Everything the editor can do, on one page.</p>
+  </div>
+  <div class="dlg-body keys" id="writeShortcutsBody"></div>
   <div class="dlg-acts" style="padding: 0 20px 18px">
     <button class="btn" type="button" data-close>Close</button>
   </div>

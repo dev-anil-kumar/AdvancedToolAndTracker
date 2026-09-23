@@ -21,7 +21,7 @@ import { $ } from './core/dom.js';
 import { dbAll } from './core/db.js';
 import { hashView, route } from './core/router.js';
 import {
-  loadPrefs, setActiveWs, setCompares, setDrawings, setFiles, setImages, setJsonDocs, setNotes, workspaces
+  loadPrefs, setActiveWs, setCompares, setDrawings, setFiles, setImages, setJsonDocs, setNotes, setWriteDocs, workspaces
 } from './core/state.js';
 
 import { applyTheme, toggleTheme } from './features/theme.js';
@@ -40,6 +40,8 @@ import { promptPaste, promptUrl } from './ui/dialogs.js';
 import { pickDrawingFile, renderDrawings } from './ui/canvas-view.js';
 import { openJsonFiles, renderJsonDocs } from './ui/json-view.js';
 import { acceptCompareDrop, renderCompares } from './ui/compare-view.js';
+import { renderWriteDocs } from './ui/write-view.js';
+import { openFilesAsWriteDocs } from './features/write/io.js';
 
 /* ================= Wiring ================= */
 const pickFile = () => $('#fileInput').click();
@@ -77,6 +79,15 @@ addEventListener('drop', e => {
   /* While the Compare view is on screen, a dropped file is one of the two
      sides. Nothing else could sensibly be meant by it there. */
   if (document.body.dataset.view === 'compare' && acceptCompareDrop(dropped)) return;
+  /* While Write is on screen, any file dropped opens as a new Write
+     document — including one dropped onto the sheet itself: an image
+     landing there is handled by features/write/images.js, which stops that
+     drop from ever bubbling this far, so whatever does reach here is
+     something that module chose not to take. */
+  if (document.body.dataset.view === 'write') {
+    openFilesAsWriteDocs(dropped);
+    return;
+  }
   /* Otherwise sort by what each file is: JSON opens in the JSON view,
      everything else goes to the library, which converts a PDF or a spreadsheet
      on the way in. A drawing dropped on the canvas never reaches here — that
@@ -93,8 +104,9 @@ addEventListener('drop', e => {
   initShell();
 
   try {
-    const [f, n, dr, js, im, cm] = await Promise.all([
-      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images'), dbAll('compares')
+    const [f, n, dr, js, im, cm, wr] = await Promise.all([
+      dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images'), dbAll('compares'),
+      dbAll('writedocs')
     ]);
     setFiles(f || []);
     setNotes((n || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
@@ -102,6 +114,7 @@ addEventListener('drop', e => {
     setJsonDocs(js || []);
     setImages(im || []);
     setCompares(cm || []);
+    setWriteDocs(wr || []);
   } catch (err) {
     console.warn('Folio: could not read saved data', err);
   }
@@ -118,6 +131,7 @@ addEventListener('drop', e => {
   renderDrawings();
   renderJsonDocs();
   renderCompares();
+  renderWriteDocs();
   emit(EVENTS.PANES);
   route(hashView() || 'home', { replace: true });
 })();

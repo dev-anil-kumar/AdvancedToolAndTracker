@@ -4,7 +4,7 @@
  */
 import { on, EVENTS } from '../core/bus.js';
 import { $ } from '../core/dom.js';
-import { compares, drawings, jsondocs, notes, panes } from '../core/state.js';
+import { compares, drawings, jsondocs, notes, panes, writedocs } from '../core/state.js';
 import { route, tabOrder, VIEWS } from '../core/router.js';
 
 /** Badge counts on the Reading and Notes tabs. */
@@ -14,6 +14,7 @@ export function updateCounts() {
   $('#tabCanvasN').textContent = drawings.length ? String(drawings.length) : '';
   $('#tabJsonN').textContent = jsondocs.length ? String(jsondocs.length) : '';
   $('#tabCompareN').textContent = compares.length ? String(compares.length) : '';
+  $('#tabWriteN').textContent = writedocs.length ? String(writedocs.length) : '';
 }
 
 /** Wire the header tabs, including arrow-key navigation. */
@@ -31,7 +32,7 @@ export function initShell() {
     });
   });
 
-  [EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.DRAWINGS, EVENTS.JSONDOCS, EVENTS.COMPARES]
+  [EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.DRAWINGS, EVENTS.JSONDOCS, EVENTS.COMPARES, EVENTS.WRITEDOCS]
     .forEach(evt => on(evt, updateCounts));
   updateCounts();
 }

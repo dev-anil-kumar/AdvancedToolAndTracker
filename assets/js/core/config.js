@@ -5,8 +5,8 @@
 
 /* ---------- Storage ---------- */
 export const DB_NAME = 'folio';
-export const DB_VER = 6;
-export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images', 'compares'];
+export const DB_VER = 7;
+export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images', 'compares', 'writedocs'];
 
 /* ---------- Layout ---------- */
 export const PER_ROW_MIN = 1;
@@ -202,6 +202,55 @@ export const DIFF_OPTIONS = [
   { key: 'words',      label: 'Word detail',           hint: 'Mark which words changed inside a rewritten line', code: true, prose: true },
   { key: 'moves',      label: 'Find moved blocks',     hint: 'A block that only changed place is marked as moved, not rewritten', code: true, prose: false },
   { key: 'syntax',     label: 'Syntax colour',         hint: 'Colour comments, strings and keywords', code: true, prose: false }
+];
+
+/* ---------- Write ---------- */
+export const WRITE_SAVE_MS = 500;    // debounce before an edit reaches storage
+
+/** Four fonts for the paper sheet — separate from the canvas palette above
+    because a document, unlike a drawing label, sometimes wants Mono. */
+export const WRITE_FONTS = [
+  { key: 'sans',  label: 'Sans',  stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif' },
+  { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif' },
+  { key: 'mono',  label: 'Mono',  stack: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+  { key: 'hand',  label: 'Hand',  stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive' }
+];
+
+/** A small highlighter palette — enough colour to organise a page, not enough
+    to have to think about which one. */
+export const WRITE_HIGHLIGHTS = [
+  { key: 'yellow', label: 'Yellow', hex: '#f5d24a' },
+  { key: 'green',  label: 'Green',  hex: '#8fd08a' },
+  { key: 'blue',   label: 'Blue',   hex: '#8ec8e8' },
+  { key: 'pink',   label: 'Pink',   hex: '#eda3c4' }
+];
+
+/** Text colour swatches. Kept short for the same reason as the highlights. */
+export const WRITE_TEXT_COLORS = [
+  { key: 'ink',   label: 'Default', hex: '' },
+  { key: 'harbor', label: 'Harbor', hex: '#1f5f7d' },
+  { key: 'amber',  label: 'Amber',  hex: '#a1671b' },
+  { key: 'moss',   label: 'Moss',   hex: '#3f6d43' },
+  { key: 'rose',   label: 'Rose',   hex: '#a8465f' },
+  { key: 'violet', label: 'Violet', hex: '#6c5aa8' }
+];
+
+/** What the slash menu offers, in the order it lists them. Each key is
+    handled by ui/write-view.js, which is the only place that knows how to
+    turn a choice into a call on the command layer. */
+export const WRITE_SLASH_ITEMS = [
+  { key: 'h1', label: 'Heading 1', hint: 'A big section title' },
+  { key: 'h2', label: 'Heading 2', hint: 'A medium section title' },
+  { key: 'h3', label: 'Heading 3', hint: 'A small section title' },
+  { key: 'paragraph', label: 'Text', hint: 'Plain paragraph' },
+  { key: 'bullet', label: 'Bulleted list', hint: '' },
+  { key: 'number', label: 'Numbered list', hint: '' },
+  { key: 'checklist', label: 'Checklist', hint: 'Clickable checkboxes' },
+  { key: 'quote', label: 'Quote', hint: '' },
+  { key: 'code', label: 'Code block', hint: '' },
+  { key: 'table', label: 'Table', hint: '3 × 3 to start' },
+  { key: 'hr', label: 'Divider', hint: 'A horizontal rule' },
+  { key: 'image', label: 'Image', hint: 'Added by the image module' }
 ];
 
 /* ---------- Note highlight palette ---------- */

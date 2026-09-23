@@ -1,0 +1,240 @@
+/* ---------------------------------------------------------------
+   The Write view: rail, toolbar, paper sheet, status bar, bubble,
+   slash menu, outline. Colours come from tokens.css; nothing here
+   invents one. `--line-h` is the one number a later page-ruling
+   feature (features/write/pages.js) needs to draw backgrounds that
+   the text actually sits on — every block below spaces itself in
+   whole multiples of it.
+   --------------------------------------------------------------- */
+
+#view-write{position:relative;padding:0;display:flex;flex-direction:column;overflow:hidden}
+.write-shell{flex:1;min-height:0;display:flex;overflow:hidden}
+
+/* ---------- Rail ---------- */
+.write-rail{
+  flex:none;width:250px;display:flex;flex-direction:column;
+  border-right:1px solid var(--line);background:var(--bg);overflow:hidden;
+}
+.write-rail-head{flex:none;display:flex;gap:6px;padding:10px;border-bottom:1px solid var(--line)}
+.write-filter{
+  flex:1;min-width:0;font:inherit;font-size:12.5px;padding:6px 9px;border-radius:7px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);
+}
+.write-filter::placeholder{color:var(--ink-3)}
+.write-rows{flex:1;min-height:0;overflow:auto;list-style:none;margin:0;padding:4px 0}
+.write-row{
+  display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:8px;margin:1px 6px;
+  transition:background .12s ease;
+}
+.write-row:hover{background:var(--bg-tint)}
+.write-row.active{background:var(--accent-soft)}
+.write-row-main{
+  flex:1;min-width:0;text-align:left;appearance:none;background:none;border:0;
+  font:inherit;color:inherit;cursor:pointer;padding:9px 2px;display:flex;flex-direction:column;gap:2px;
+}
+.write-row-name{
+  font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.write-row.active .write-row-name{color:var(--accent-ink)}
+.write-row-meta{font-size:11px;color:var(--ink-3)}
+.write-row-rename{
+  flex:1;min-width:0;font:inherit;font-size:13px;font-weight:500;padding:5px 6px;margin:4px 2px;
+  border:1px solid var(--line-strong);border-radius:5px;background:var(--surface);color:var(--ink);
+}
+.write-row-acts{flex:none;display:flex;gap:4px;opacity:0;transition:opacity .12s ease}
+.write-row:hover .write-row-acts,.write-row-acts:focus-within{opacity:1}
+@media (hover:none){.write-row-acts{opacity:1}}
+
+/* ---------- Main column ---------- */
+.write-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+
+.write-toolbar{
+  flex:none;display:flex;align-items:center;gap:2px;flex-wrap:nowrap;overflow-x:auto;
+  padding:6px clamp(8px,2vw,14px);border-bottom:1px solid var(--line);background:var(--bg);
+  scrollbar-width:thin;
+}
+.wt-group{flex:none;display:flex;align-items:center;gap:2px;padding:0 6px;border-right:1px solid var(--line)}
+.wt-group:last-child{border-right:0}
+.wt-group:empty{display:none}
+.wt-btn{
+  flex:none;appearance:none;border:1px solid transparent;background:none;border-radius:6px;
+  width:29px;height:29px;display:grid;place-items:center;color:var(--ink-2);cursor:pointer;
+  font-size:12px;font-weight:600;transition:background .12s ease,color .12s ease;
+}
+.wt-btn svg{width:16px;height:16px}
+.wt-btn:hover{background:var(--bg-tint);color:var(--ink)}
+.wt-btn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink)}
+.wt-btn:disabled{opacity:.4;cursor:default;pointer-events:none}
+.wt-rail-toggle{display:none;margin-right:6px}
+.wt-select{
+  flex:none;font:inherit;font-size:12px;padding:4px 6px;border-radius:6px;max-width:104px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);margin:0 2px;
+}
+.wt-swatchwrap{position:relative;display:flex;align-items:center}
+.wt-caret{
+  flex:none;appearance:none;border:0;background:none;color:var(--ink-3);cursor:pointer;
+  font-size:9px;width:12px;height:29px;display:grid;place-items:center;
+}
+.wt-caret:hover{color:var(--ink)}
+.wt-caret-solo{width:29px;color:var(--ink-2)}
+.wt-pop{
+  position:absolute;top:100%;left:0;margin-top:4px;z-index:20;display:flex;gap:5px;padding:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:9px;box-shadow:var(--pop);
+}
+.wt-swatch{
+  width:22px;height:22px;border-radius:6px;border:1px solid var(--line-strong);cursor:pointer;
+  display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--surface);
+}
+.wt-swatch:hover{transform:translateY(-1px)}
+.wt-pop-menu{flex-direction:column;min-width:150px}
+.wt-menuitem{
+  appearance:none;border:0;background:none;text-align:left;font:inherit;font-size:12.5px;
+  color:var(--ink-2);padding:6px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;
+}
+.wt-menuitem:hover{background:var(--bg-tint);color:var(--ink)}
+
+/* ---------- The paper ---------- */
+.write-scroll{
+  flex:1;min-height:0;overflow:auto;background:var(--bg-tint);
+  display:flex;justify-content:center;padding:40px 20px 30vh;
+}
+.write-page{
+  --line-h:28px;
+  flex:none;width:100%;max-width:720px;background:var(--surface);
+  border-radius:4px;box-shadow:var(--shadow);transition:max-width .15s ease;
+}
+.write-page[data-width="narrow"]{max-width:560px}
+.write-page[data-width="wide"]{max-width:920px}
+.write-page[data-width="full"]{max-width:none}
+.write-page[data-tint="cream"]{background:#fbf6ea}
+.write-page[data-tint="dark"]{background:#20242a;color:#dee3e8}
+.write-sheet{
+  min-height:calc(var(--line-h) * 30);padding:calc(var(--line-h) * 2) calc(var(--line-h) * 2.2);
+  outline:none;font-size:16px;line-height:var(--line-h);color:inherit;
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
+  overflow-wrap:break-word;caret-color:var(--accent);
+}
+.write-sheet:empty::before{content:"Start writing…";color:var(--ink-3)}
+
+/* Every block spaces itself in whole multiples of --line-h, so a later
+   page-ruling feature can align the ruling to the text without touching
+   this file. */
+.write-sheet p{margin:0 0 var(--line-h)}
+.write-sheet h1,.write-sheet h2,.write-sheet h3{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;
+  font-weight:700;letter-spacing:-.018em;margin:0 0 var(--line-h)
+}
+.write-sheet h1{font-size:1.9em;line-height:calc(var(--line-h) * 2)}
+.write-sheet h2{font-size:1.5em;line-height:calc(var(--line-h) * 1.5)}
+.write-sheet h3{font-size:1.2em;line-height:var(--line-h)}
+.write-sheet ul,.write-sheet ol{margin:0 0 var(--line-h);padding-left:1.4em}
+.write-sheet li{margin:0}
+.write-sheet blockquote{
+  margin:0 0 var(--line-h);padding:0 0 0 1.1em;
+  border-left:2px solid color-mix(in srgb,var(--accent) 55%, var(--line));color:var(--ink-2);
+}
+.write-sheet pre{
+  margin:0 0 var(--line-h);padding:var(--line-h) calc(var(--line-h) * .7);
+  background:var(--code-bg);border-radius:8px;overflow-x:auto;
+}
+.write-sheet pre code,.write-sheet code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85em;
+}
+.write-sheet code{background:var(--accent-soft);color:var(--accent-ink);padding:.15em .35em;border-radius:5px}
+.write-sheet pre code{background:none;color:#e6edf3;padding:0;line-height:var(--line-h)}
+.write-sheet hr{border:0;border-top:1px solid var(--line);margin:calc(var(--line-h) - 1px) 0}
+.write-sheet table{border-collapse:collapse;margin:0 0 var(--line-h);width:100%}
+.write-sheet td,.write-sheet th{border:1px solid var(--line);padding:calc(var(--line-h) / 4) calc(var(--line-h) / 3.5);vertical-align:top}
+.write-sheet img{max-width:100%;height:auto;display:block;margin:0 0 var(--line-h);border-radius:8px}
+.write-sheet mark.w-hl{border-radius:3px;padding:0 .1em;color:#171a1d}
+.write-sheet ul.write-checklist{list-style:none;padding-left:1.6em}
+.write-sheet ul.write-checklist li{position:relative}
+.write-sheet ul.write-checklist input[type="checkbox"]{position:absolute;left:-1.5em;top:.35em;accent-color:var(--accent)}
+
+/* ---------- Status bar ---------- */
+.write-status{
+  flex:none;display:flex;align-items:center;gap:14px;padding:6px clamp(10px,2vw,16px);
+  border-top:1px solid var(--line);background:var(--bg);font-size:11.5px;color:var(--ink-3);
+  font-variant-numeric:tabular-nums;
+}
+.write-status .saved{min-width:56px;text-align:right}
+
+/* ---------- Outline panel ---------- */
+.write-outline{
+  flex:none;width:230px;border-left:1px solid var(--line);background:var(--bg);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.write-outline-head{
+  flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--ink-2);
+}
+.write-outline ul{list-style:none;margin:0;padding:6px;overflow:auto}
+.write-outline-row button{
+  display:block;width:100%;text-align:left;appearance:none;background:none;border:0;font:inherit;
+  color:var(--ink-2);padding:5px 8px;border-radius:6px;cursor:pointer;font-size:12.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.write-outline-row button:hover{background:var(--bg-tint);color:var(--ink)}
+.write-outline-row.lvl-h2 button{padding-left:18px}
+.write-outline-row.lvl-h3 button{padding-left:28px;color:var(--ink-3)}
+.write-outline-empty{padding:10px 12px;font-size:12px;color:var(--ink-3)}
+
+/* ---------- Floating selection bubble ---------- */
+.write-bubble{
+  position:fixed;z-index:40;display:flex;gap:2px;padding:4px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--pop);
+}
+
+/* ---------- Slash menu ---------- */
+.write-slash{
+  position:fixed;z-index:40;width:230px;max-height:280px;overflow:auto;padding:6px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--pop);
+}
+.write-slash-row{
+  display:flex;flex-direction:column;gap:1px;padding:6px 10px;border-radius:7px;cursor:pointer;
+}
+.write-slash-row.active,.write-slash-row:hover{background:var(--accent-soft)}
+.write-slash-label{font-size:13px;font-weight:500;color:var(--ink)}
+.write-slash-hint{font-size:11px;color:var(--ink-3)}
+
+/* ---------- Link popover ---------- */
+.write-linkbox{
+  position:fixed;z-index:40;display:flex;gap:6px;padding:8px;width:300px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--pop);
+}
+.write-linkbox input{flex:1;min-width:0;font:inherit;font-size:12.5px;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg)}
+
+/* ---------- Empty state ---------- */
+.write-empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.write-empty .box{max-width:52ch;text-align:center}
+.write-empty h2{margin:0 0 8px;font-size:1.05rem;font-weight:600;letter-spacing:-.015em}
+.write-empty p{margin:0 0 16px;color:var(--ink-3);font-size:13.5px;line-height:1.65}
+
+/* ---------- Focus mode ---------- */
+body.zen .write-rail,body.zen .write-toolbar,body.zen .write-status,body.zen .write-outline{
+  display:none !important;
+}
+body.zen .write-scroll{padding-top:8vh}
+
+/* ---------- Responsive ---------- */
+@media (max-width:880px){
+  .write-outline{position:absolute;top:0;right:0;bottom:0;z-index:15;box-shadow:var(--pop)}
+}
+@media (max-width:720px){
+  .wt-rail-toggle{display:grid}
+  .write-rail{position:absolute;top:0;left:0;bottom:0;width:82vw;max-width:300px;z-index:16;box-shadow:var(--pop);transform:translateX(-100%);transition:transform .18s ease}
+  .write-rail.open{transform:translateX(0)}
+  .write-scroll{padding:24px 12px 30vh}
+  .write-sheet{padding:var(--line-h) calc(var(--line-h) * .9)}
+}
+@media (prefers-reduced-motion: reduce){
+  .write-page,.write-rail{transition:none}
+}
+
+/* ---------- Print ---------- */
+@media print{
+  header.app,.write-rail,.write-toolbar,.write-status,.write-outline,.write-bubble,.write-slash{display:none !important}
+  #view-write,.write-shell,.write-main,.write-scroll{overflow:visible !important;display:block !important;padding:0 !important;background:#fff !important}
+  .write-page{box-shadow:none !important;max-width:none !important;border-radius:0}
+  .write-sheet{color:#000}
+}

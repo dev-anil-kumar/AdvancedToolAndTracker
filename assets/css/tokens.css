@@ -55,6 +55,19 @@
   --c-chg-bg:rgba(201,138,27,.09);
   --c-move:#6c5aa8;
   --c-move-bg:rgba(108,90,168,.10);
+  /* Write: page rulings (assets/css/write-pages.css). Ruling lines are
+     mixed from currentColor so one definition reads correctly on white,
+     cream, dark or yellow paper alike; the margin and yellow-pad colours
+     are fixed, paper-like hues rather than derived from the ink. */
+  --wp-rule:color-mix(in srgb, currentColor 14%, transparent);
+  --wp-rule-strong:color-mix(in srgb, currentColor 24%, transparent);
+  --wp-dot:color-mix(in srgb, currentColor 32%, transparent);
+  --wp-margin:#c1443c;
+  --wp-yellow:#fbf3c8;
+  --wp-hover:color-mix(in srgb, var(--accent) 16%, transparent);
+  --wp-hover-strong:color-mix(in srgb, var(--accent) 45%, transparent);
+  --wp-chip-bg:var(--surface);
+  --wp-chip-ink:var(--ink-2);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -76,6 +89,8 @@
     --c-del-mark:rgba(224,138,128,.30); --c-ins-mark:rgba(127,201,143,.28);
     --c-chg-bg:rgba(224,180,100,.09);
     --c-move:#b3a6e8; --c-move-bg:rgba(179,166,232,.12);
+    --wp-margin:#d9776d;
+    --wp-hover:color-mix(in srgb, var(--accent) 22%, transparent);
   }
 }
 :root[data-theme="dark"]{
@@ -97,6 +112,8 @@
   --c-del-mark:rgba(224,138,128,.30); --c-ins-mark:rgba(127,201,143,.28);
   --c-chg-bg:rgba(224,180,100,.09);
   --c-move:#b3a6e8; --c-move-bg:rgba(179,166,232,.12);
+  --wp-margin:#d9776d;
+  --wp-hover:color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 *,*::before,*::after{box-sizing:border-box}

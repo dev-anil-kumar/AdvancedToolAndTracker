@@ -1,0 +1,56 @@
+/* ---------------------------------------------------------------
+   The Write view, phase 2: paste, images, find & replace. Loaded
+   right after write.css — colours come from tokens.css, sizes are
+   whole multiples of --line-h (set on .write-page) where it matters.
+   --------------------------------------------------------------- */
+
+/* ---------- Images ---------- */
+.write-sheet img.write-img{cursor:pointer}
+.write-sheet img.write-img[data-align="left"]{float:left;margin:0 var(--line-h) calc(var(--line-h) / 2) 0}
+.write-sheet img.write-img[data-align="right"]{float:right;margin:0 0 calc(var(--line-h) / 2) var(--line-h)}
+.write-sheet img.write-img[data-align="center"]{display:block;float:none;margin-left:auto;margin-right:auto}
+.write-sheet img.write-img.write-img-selected{outline:2px solid var(--accent);outline-offset:2px}
+
+.write-img-toolbar{
+  position:fixed;z-index:45;display:flex;align-items:center;gap:2px;padding:4px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--pop);
+}
+.write-img-alt{
+  flex:none;width:120px;margin:0 2px;font:inherit;font-size:12px;padding:5px 7px;border-radius:6px;
+  border:1px solid var(--line);background:var(--bg);color:var(--ink);
+}
+.write-img-handle{
+  position:fixed;z-index:45;width:12px;height:12px;border-radius:3px;cursor:nwse-resize;
+  background:var(--accent);border:2px solid var(--surface);box-shadow:var(--pop);
+}
+
+/* ---------- Find & replace ---------- */
+.write-find{
+  position:fixed;z-index:46;display:flex;flex-direction:column;gap:6px;min-width:360px;padding:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--pop);
+}
+.write-find-row{display:flex;align-items:center;gap:4px}
+.write-find-input{
+  flex:1;min-width:0;font:inherit;font-size:12.5px;padding:6px 8px;border-radius:6px;
+  border:1px solid var(--line);background:var(--bg);color:var(--ink);
+}
+.write-find-count{
+  flex:none;min-width:56px;text-align:center;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+}
+.write-find-toggle{font-size:11px}
+.write-find-toggle[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* Native path: the browser paints these with no DOM of its own. */
+::highlight(write-find){background-color:var(--hl-bg)}
+::highlight(write-find-active){background-color:var(--hl);color:#fff}
+
+/* Fallback path: fixed-position rectangles over the live text's own
+   getClientRects() — never a child of the sheet, so there is nothing to
+   strip before a save. */
+.write-find-overlay{position:fixed;inset:0;z-index:12;pointer-events:none}
+mark.write-find-mark{position:fixed;background:var(--hl-bg);border-radius:2px}
+mark.write-find-mark.active{background:var(--hl);opacity:.85}
+
+@media (prefers-reduced-motion: reduce){
+  .write-find-row{scroll-behavior:auto}
+}

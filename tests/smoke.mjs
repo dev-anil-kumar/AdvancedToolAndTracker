@@ -2532,6 +2532,459 @@ ok('unfolding sizes the pane for every one of them',
 ok('and still draws only what fits', rowsIn('#cRowsA').length < 80, rowsIn('#cRowsA').length + ' rows');
 
 
+/* ============================ write ============================ */
+const writedocsApi = await import('../assets/js/features/writedocs.js');
+const writeState = await import('../assets/js/core/state.js');
+const dbApi = await import('../assets/js/core/db.js');
+
+section('write: writedocs CRUD');
+const wdocsBefore = writeState.writedocs.length;
+const wdoc = await writedocsApi.addWriteDoc({ name: '  My draft  ', html: '<p>Hello</p>' });
+ok('a new document is added', writeState.writedocs.length === wdocsBefore + 1);
+ok('the name is trimmed', wdoc.name === 'My draft');
+ok('it has sensible page defaults', wdoc.page.style === 'blank' && wdoc.page.tint === 'white' && wdoc.page.width === 'normal');
+ok('and a default font', wdoc.font === 'sans');
+ok('the Write tab counts it', q('#tabWriteN').textContent === String(writeState.writedocs.length));
+ok('persisted to the writedocs store', (await dbApi.dbAll('writedocs')).some(r => r.id === wdoc.id));
+
+await writedocsApi.updateWriteDoc(wdoc.id, { html: '<p>Hello world</p>' });
+ok('content updates in place', writeState.writeDocById(wdoc.id).html === '<p>Hello world</p>');
+await writedocsApi.updateWriteDoc(wdoc.id, { page: { tint: 'cream' } });
+ok('a page patch merges rather than replacing the whole object',
+  writeState.writeDocById(wdoc.id).page.style === 'blank' && writeState.writeDocById(wdoc.id).page.tint === 'cream');
+
+await writedocsApi.renameWriteDoc(wdoc.id, '  Renamed draft  ');
+ok('renaming trims the name too', writeState.writeDocById(wdoc.id).name === 'Renamed draft');
+
+const wcopy = await writedocsApi.duplicateWriteDoc(wdoc.id);
+ok('duplicating makes a new id with the same content',
+  wcopy.id !== wdoc.id && wcopy.html === writeState.writeDocById(wdoc.id).html);
+ok('and says so in the name', wcopy.name === 'Renamed draft copy');
+ok('the two are independent records', writeState.writedocs.filter(w => w.id === wcopy.id || w.id === wdoc.id).length === 2);
+
+const wcountBeforeRemove = writeState.writedocs.length;
+const wremoved = await writedocsApi.removeWriteDoc(wcopy.id);
+ok('remove asks for confirmation and then removes it',
+  wremoved === true && writeState.writedocs.length === wcountBeforeRemove - 1);
+ok('and it is gone from state', writeState.writeDocById(wcopy.id) === null);
+
+section('write: command helpers');
+const wcmds = await import('../assets/js/features/write/commands.js');
+ok('queryState defaults to plain text when nothing is bound', (() => {
+  const st = wcmds.queryState();
+  return st.bold === false && st.block === 'p' && st.link === null;
+})());
+
+const wsheet = d.createElement('div');
+wsheet.contentEditable = 'true';
+d.body.appendChild(wsheet);
+wcmds.bindSheet(wsheet);
+const selectNodeRange = (node, start, end) => {
+  const r = d.createRange();
+  if (end === undefined) r.selectNodeContents(node); else { r.setStart(node, start); r.setEnd(node, end); }
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(r);
+  return r;
+};
+
+wsheet.innerHTML = '<p>Hello world</p>';
+selectNodeRange(wsheet.querySelector('p').firstChild, 0, 5);
+wcmds.inlineCode();
+ok('inline code wraps just the selected text',
+  !!wsheet.querySelector('code') && wsheet.querySelector('code').textContent === 'Hello' &&
+  wsheet.textContent === 'Hello world', wsheet.innerHTML);
+
+wsheet.innerHTML = '<p>Hello world</p>';
+selectNodeRange(wsheet.querySelector('p').firstChild, 6, 11);
+wcmds.highlight('#f5d24a');
+const wmark = wsheet.querySelector('mark.w-hl');
+ok('highlight wraps the selection in a coloured mark',
+  !!wmark && wmark.textContent === 'world' && wmark.style.background !== '', wsheet.innerHTML);
+
+wsheet.innerHTML = '<p>Plain text</p>';
+selectNodeRange(wsheet.querySelector('p'));
+wcmds.fontFamily('Georgia, serif');
+const wfont = wsheet.querySelector('span');
+ok('font family wraps the selection in a styled span', !!wfont && /Georgia/.test(wfont.style.fontFamily), wsheet.innerHTML);
+
+wsheet.innerHTML = '<p>Sized</p>';
+selectNodeRange(wsheet.querySelector('p'));
+wcmds.fontSize(24);
+const wsize = wsheet.querySelector('span');
+ok('font size wraps the selection at the given pixel size', !!wsize && wsize.style.fontSize === '24px', wsheet.innerHTML);
+
+wsheet.innerHTML = '';
+const wtable = wcmds.insertTable(2, 2);
+ok('insertTable makes the requested grid', wtable.rows.length === 2 && wtable.rows[0].children.length === 2);
+const selectCell = (td) => selectNodeRange(td);
+selectCell(wtable.rows[0].children[0]);
+wcmds.addRow();
+ok('addRow adds a row with the same column count',
+  wtable.rows.length === 3 && [...wtable.rows].every(r => r.children.length === 2));
+selectCell(wtable.rows[0].children[0]);
+wcmds.addCol();
+ok('addCol adds a cell to every row', [...wtable.rows].every(r => r.children.length === 3));
+selectCell(wtable.rows[0].children[0]);
+wcmds.removeRow();
+ok('removeRow shrinks the table back down', wtable.rows.length === 2);
+selectCell(wtable.rows[0].children[0]);
+wcmds.removeCol();
+ok('removeCol removes a cell from every row', [...wtable.rows].every(r => r.children.length === 2));
+wsheet.remove();
+
+section('write: shortcuts — pure matchers');
+const wshort = await import('../assets/js/features/write/shortcuts.js');
+ok('keyCombo names a plain modifier combo', wshort.keyCombo({ metaKey: true, key: 'b' }) === 'mod+b');
+ok('and stacks modifiers in a fixed order', wshort.keyCombo({ ctrlKey: true, shiftKey: true, key: 'X' }) === 'mod+shift+x');
+ok('an alt-only combo reads as itself', wshort.keyCombo({ altKey: true, key: '1' }) === 'alt+1');
+
+ok('a single hash and a space triggers an h1', JSON.stringify(wshort.lineTrigger('# ')) === JSON.stringify({ type: 'heading', level: 1, cut: 2 }));
+ok('three hashes make an h3', wshort.lineTrigger('### ').level === 3);
+ok('a hash with no trailing space is not a trigger yet', wshort.lineTrigger('#') === null);
+ok('a dash and a space starts a bullet', wshort.lineTrigger('- ').type === 'bullet');
+ok('a number and a dot starts a numbered list', wshort.lineTrigger('12. ').type === 'number');
+ok('a checkbox marker starts a checklist', wshort.lineTrigger('[] ').type === 'checklist');
+ok('three backticks start a code fence', wshort.lineTrigger('```').type === 'code');
+ok('ordinary text is never a trigger', wshort.lineTrigger('Hello ') === null);
+
+const wbold = wshort.inlineTrigger('say **hello**');
+ok('a closed double asterisk is bold', !!wbold && wbold.type === 'bold' && wbold.inner === 'hello');
+const witalic = wshort.inlineTrigger('say *hello*');
+ok('a single asterisk pair is italic, not bold', !!witalic && witalic.type === 'italic' && witalic.inner === 'hello');
+const wcode = wshort.inlineTrigger('say `hello`');
+ok('backticks make inline code', !!wcode && wcode.type === 'code' && wcode.inner === 'hello');
+ok('an unclosed span is not a trigger', wshort.inlineTrigger('say **hello') === null);
+
+let wcalled = '';
+const wdispatch = wshort.createWriteShortcuts({ bold: () => { wcalled = 'bold'; } });
+wdispatch({ metaKey: true, key: 'b', preventDefault() {} });
+ok('createWriteShortcuts dispatches a bound combo to its action', wcalled === 'bold');
+wdispatch({ metaKey: true, key: 'f', preventDefault() {} });
+await wait(20);
+ok('a combo with no action yet toasts instead of doing nothing', /ready yet/.test(q('#toast').textContent));
+
+/* ---------- write: pages — pure helpers (Agent C) ---------- */
+section('write: pages — pure helpers');
+const wpages = await import('../assets/js/features/write/pages.js');
+ok('pageClasses names the style, tint and width', wpages.pageClasses({ style: 'lined', tint: 'cream', width: 'wide' })
+  === 'wp-mini wp-mini-lined wp-mini-tint-cream wp-mini-width-wide');
+ok('pageClasses falls back to the same defaults as a fresh document', wpages.pageClasses({})
+  === 'wp-mini wp-mini-blank wp-mini-tint-white wp-mini-width-normal');
+ok('pageClasses tolerates being called with nothing at all', wpages.pageClasses()
+  === 'wp-mini wp-mini-blank wp-mini-tint-white wp-mini-width-normal');
+ok('snapToLine rounds down to the nearest ruling line', wpages.snapToLine(30, 28) === 28);
+ok('snapToLine rounds up when past the midpoint', wpages.snapToLine(45, 28) === 56);
+ok('snapToLine on an exact multiple is a no-op', wpages.snapToLine(84, 28) === 84);
+ok('snapToLine with no line height just hands the pixel value back', wpages.snapToLine(17, 0) === 17);
+
+section('write: the view itself');
+click(q('#tab-write'));
+await wait(120);
+ok('the write view is showing', shownViews() === 'view-write', shownViews());
+ok('it opens the most recently edited document automatically', !q('#writeToolbar').hidden);
+ok('the status bar reports Saved', q('#writeSaved').textContent === 'Saved');
+ok('the rail lists every document', qa('.write-row').length === writeState.writedocs.length,
+  qa('.write-row').length + ' vs ' + writeState.writedocs.length);
+ok('the page-style button (Agent C) is wired into the "page" toolbar group',
+  !!q('.wt-group[data-group="page"] button'));
+
+const wRailBefore = qa('.write-row').length;
+click(q('#writeNew'));
+await wait(80);
+ok('New document opens a fresh, empty sheet', (q('#writeSheet').textContent || '').trim() === '');
+ok('and adds one row to the rail', qa('.write-row').length === wRailBefore + 1);
+
+q('#writeFilter').value = 'no such document anywhere';
+q('#writeFilter').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(40);
+ok('filtering hides every row that does not match', qa('.write-row').length === 0);
+q('#writeFilter').value = '';
+q('#writeFilter').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(40);
+ok('clearing the filter brings the rail back', qa('.write-row').length === wRailBefore + 1);
+
+const wRemoveBtn = qa('.write-row').find(li => /Untitled document/.test(li.textContent))
+  .querySelector('.btn.danger');
+click(wRemoveBtn);
+await wait(80);
+ok('Remove takes the new, empty document back out', qa('.write-row').length === wRailBefore);
+
+section('write: mod+shift+v pastes as plain text without a clipboard-permission prompt');
+click(q('#writeNew'));
+await wait(80);
+q('#writeSheet').focus();
+const plainVEvent = new window.KeyboardEvent('keydown', { key: 'v', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
+q('#writeSheet').dispatchEvent(plainVEvent);
+ok('the shortcut leaves the key combo alone so the native paste can follow',
+  !plainVEvent.defaultPrevented);
+const plainPasteEvent = new window.Event('paste', { bubbles: true, cancelable: true });
+plainPasteEvent.clipboardData = {
+  items: [],
+  getData: (type) => (type === 'text/html' ? '<b>Loud</b> text' : '**Loud** text')
+};
+q('#writeSheet').dispatchEvent(plainPasteEvent);
+await wait(60);
+ok('the paste that follows is forced to plain text, not HTML or Markdown',
+  /\*\*Loud\*\* text/.test(q('#writeSheet').textContent) && !q('#writeSheet').querySelector('b'),
+  q('#writeSheet').innerHTML);
+const normalPasteEvent = new window.Event('paste', { bubbles: true, cancelable: true });
+let sawHtml = false;
+normalPasteEvent.clipboardData = {
+  items: [],
+  getData: (type) => { if (type === 'text/html') sawHtml = true; return type === 'text/html' ? '<b>Normal</b>' : 'Normal'; }
+};
+q('#writeSheet').dispatchEvent(normalPasteEvent);
+await wait(60);
+ok('the flag is one-shot: the very next paste, with no shortcut before it, is handled normally again',
+  sawHtml && !!q('#writeSheet').querySelector('b'));
+
+section('write: a selected image\'s outline never reaches storage, and doc switch clears transient UI');
+click(q('#writeNew'));
+await wait(80);
+const imgDocId = writeState.writeDocsByRecency()[0].id;
+q('#writeSheet').innerHTML = '<p>Before</p>' +
+  '<img class="write-img" data-size="m" data-align="none" src="data:image/png;base64,AAA" alt="pic">';
+const theImg = q('#writeSheet img.write-img');
+theImg.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+await wait(20);
+ok('clicking the image selects it and opens its floating toolbar',
+  theImg.classList.contains('write-img-selected') && !!q('.write-img-toolbar') && !q('.write-img-toolbar').hidden);
+
+q('#writeSheet').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(600);
+ok('the selection outline never made it into the saved record',
+  !/write-img-selected/.test(writeState.writeDocById(imgDocId).html));
+ok('but the live sheet still shows it selected — autosave did not touch the DOM',
+  q('#writeSheet img.write-img').classList.contains('write-img-selected'));
+
+click(q('#writeNew'));
+await wait(80);
+ok('switching documents deselects the old image and hides its toolbar', q('.write-img-toolbar').hidden);
+
+section('write: switching documents closes an open find bar');
+const searchBtn = q('.wt-group[data-group="search"] button');
+click(searchBtn);
+await wait(30);
+ok('Find opens', !q('.write-find').hidden);
+q('.write-find-query').value = 'e';
+q('.write-find-query').dispatchEvent(new window.Event('input', { bubbles: true }));
+await wait(30);
+click(q('#writeNew'));
+await wait(80);
+ok('and switching documents closes it again', q('.write-find').hidden);
+
+section('write: a non-image file dropped on the sheet still opens as a new document');
+const dropDocsBefore = writeState.writedocs.length;
+const sheetDropEvent = new window.Event('drop', { bubbles: true, cancelable: true });
+sheetDropEvent.dataTransfer = { files: asFileList([new window.File(['dropped text'], 'dropped.txt', { type: 'text/plain' })]) };
+q('#writeSheet').dispatchEvent(sheetDropEvent);
+await wait(80);
+ok('it is not silently swallowed — a new Write document was opened for it',
+  writeState.writedocs.length === dropDocsBefore + 1);
+
+/* ===================================================================
+ * write: paste / images / search (Agent B) — pure-function tests only.
+ * =================================================================== */
+section('write: paste — sanitizeHtml allowlist');
+const { sanitizeHtml, looksLikeMarkdown } = await import('../assets/js/features/write/paste.js');
+
+const semantic = sanitizeHtml('<p>Hello <b>bold</b> and <i>italic</i> <a href="https://x.test">link</a></p>');
+ok('keeps semantic tags and href', /<b>bold<\/b>/.test(semantic) && /<a href="https:\/\/x\.test">link<\/a>/.test(semantic));
+
+const scripted = sanitizeHtml('<p>safe</p><script>alert(1)</script><img src=x onerror="alert(1)">');
+ok('drops script tags', !/<script/i.test(scripted));
+ok('drops event-handler attributes', !/onerror/i.test(scripted));
+
+const styled = sanitizeHtml('<p style="color:red;mso-height-rule:exactly;margin:9px;font-weight:bold">x</p>');
+ok('keeps an allowlisted style property', /color:\s*red/.test(styled));
+ok('drops a non-allowlisted style property', !/mso-height-rule/.test(styled) && !/margin/.test(styled));
+
+const classed = sanitizeHtml('<p class="MsoNormal" id="foo">x</p>');
+ok('drops class and id attributes', !/class=/.test(classed) && !/id=/.test(classed));
+
+const wordPaste = sanitizeHtml('<p>before</p><o:p>&nbsp;</o:p><p>after</p>');
+ok('drops Word’s <o:p> marker', !/o:p/i.test(wordPaste));
+
+const commented = sanitizeHtml('<!--[if gte mso 9]><p>hidden</p><![endif]--><p>shown</p>');
+ok('strips HTML comments', !/hidden/.test(commented) && /shown/.test(commented));
+
+const googleWrap = sanitizeHtml('<b id="docs-internal-guid-123" style="font-weight:normal">first<br>second</b>');
+ok('unwraps Google Docs’ font-weight:normal <b> reset',
+  !/<b[ >]/i.test(googleWrap) && /<span/i.test(googleWrap) && /first/.test(googleWrap) && /<br/i.test(googleWrap) && /second/.test(googleWrap));
+
+const tableish = sanitizeHtml('<table><tr><td>1</td><td>2</td></tr></table>');
+ok('keeps table parts', /<table>/.test(tableish) && /<td>1<\/td>/.test(tableish));
+
+section('write: paste — looksLikeMarkdown');
+ok('a heading reads as Markdown', looksLikeMarkdown('# Title\n\nSome text.'));
+ok('a fenced code block reads as Markdown', looksLikeMarkdown('```\ncode\n```'));
+ok('a bullet list reads as Markdown', looksLikeMarkdown('- one\n- two'));
+ok('two weak signals together read as Markdown', looksLikeMarkdown('Check the `docs` and see **bold** too.'));
+ok('one weak signal alone does not', !looksLikeMarkdown('This costs $5 (roughly).'));
+ok('ordinary prose is not Markdown', !looksLikeMarkdown('Just a normal sentence about the weather today.'));
+ok('empty text is not Markdown', !looksLikeMarkdown(''));
+
+section('write: search — findMatches');
+const { findMatches } = await import('../assets/js/features/write/search.js');
+const haystack = 'The cat sat on the mat. The Cat ran.';
+ok('finds every case-insensitive occurrence', findMatches(haystack, 'cat').length === 2);
+ok('case-sensitive narrows the match set', findMatches(haystack, 'Cat', { caseSensitive: true }).length === 1);
+ok('whole-word skips a substring match', findMatches('category cat', 'cat', { wholeWord: true }).length === 1);
+ok('offsets point at the real text', (() => {
+  const [m] = findMatches(haystack, 'mat');
+  return haystack.slice(m.start, m.end) === 'mat';
+})());
+ok('regex metacharacters in the query are treated literally', findMatches('a.b a.b', 'a.b').length === 2);
+ok('an empty query finds nothing', findMatches(haystack, '').length === 0);
+
+/* ==================== write: open-any-file & download (Agent D) ==================== */
+const wio = await import('../assets/js/features/write/io.js');
+
+section('write: fileKind — which reader a file goes to');
+ok('.html is html', wio.fileKind('report.html') === 'html');
+ok('.htm is html', wio.fileKind('report.htm') === 'html');
+ok('.md is markdown', wio.fileKind('notes.md') === 'markdown');
+ok('.markdown is markdown', wio.fileKind('notes.markdown') === 'markdown');
+ok('.pdf is pdf', wio.fileKind('scan.pdf') === 'pdf');
+ok('.xlsx is sheet', wio.fileKind('data.xlsx') === 'sheet');
+ok('.csv is csv', wio.fileKind('data.csv') === 'csv');
+ok('.rtf is rtf', wio.fileKind('memo.rtf') === 'rtf');
+ok('.docx is docx', wio.fileKind('letter.docx') === 'docx');
+ok('.txt is text', wio.fileKind('log.txt') === 'text');
+ok('.js is code', wio.fileKind('app.js') === 'code');
+ok('.json is a code block here — Write is not the JSON view', wio.fileKind('data.json') === 'code');
+ok('an extensionless text/plain file is text', wio.fileKind('README', 'text/plain') === 'text');
+ok('no name and no type is still text, not unknown', wio.fileKind('', '') === 'text');
+ok('an unrecognised extension with an unhelpful type is unknown', wio.fileKind('photo.heic', 'image/heic') === 'unknown');
+
+section('write: textToHtml — a reader\'s text, turned into sheet HTML');
+ok('plain text becomes paragraphs; a blank line splits them',
+  wio.textToHtml('Hello\n\nWorld', 'text') === '<p>Hello</p><p>World</p>');
+ok('a single newline inside a paragraph becomes a <br>',
+  wio.textToHtml('Line one\nLine two', 'text') === '<p>Line one<br>Line two</p>');
+ok('code becomes an escaped <pre><code> block',
+  wio.textToHtml('<b>x</b> && y', 'code') === '<pre><code>&lt;b&gt;x&lt;/b&gt; &amp;&amp; y</code></pre>');
+ok('markdown is rendered', /<h1>Title<\/h1>/.test(wio.textToHtml('# Title\n\nSome **bold** text.', 'markdown')));
+ok('a script tag in markdown source is stripped, not rendered',
+  !/<script/i.test(wio.textToHtml('<script>alert(1)</script>\n\n# Hi', 'markdown')));
+const csvHtml = wio.textToHtml('Name,Age\nAda,36\nGrace,85', 'csv');
+ok('csv becomes a table', /<table>/.test(csvHtml) && /<th>Name<\/th>/.test(csvHtml) && /<td>Ada<\/td>/.test(csvHtml));
+const rtfOut = wio.textToHtml('{\\rtf1\\ansi Hello\\par World}', 'rtf');
+ok('rtf is stripped down to its plain text', /Hello/.test(rtfOut) && /World/.test(rtfOut) && !/\\rtf/.test(rtfOut));
+const richHtml = wio.textToHtml('<p style="color:red;font-weight:bold" onclick="alert(1)" class="x">Hi <script>bad()</script></p>', 'html');
+ok('opened HTML keeps an allowed style property', /color:\s*red/.test(richHtml));
+ok('opened HTML drops event handlers and scripts', !/onclick/i.test(richHtml) && !/<script/i.test(richHtml));
+ok('opened HTML drops attributes off the allowlist, like class', !/class=/.test(richHtml));
+
+section('write: htmlToMarkdown — the Download menu\'s .md file');
+ok('headings', wio.htmlToMarkdown('<h1>A</h1><h2>B</h2>').trim() === '# A\n\n## B');
+ok('bold, italic, strike and inline code',
+  wio.htmlToMarkdown('<p><b>b</b> <i>i</i> <s>s</s> <code>c</code></p>').trim() === '**b** *i* ~~s~~ `c`');
+ok('a link', wio.htmlToMarkdown('<p><a href="https://x.test">go</a></p>').trim() === '[go](https://x.test)');
+ok('an image', wio.htmlToMarkdown('<p><img src="a.png" alt="A"></p>').trim() === '![A](a.png)');
+ok('a bulleted list', wio.htmlToMarkdown('<ul><li>One</li><li>Two</li></ul>').trim() === '- One\n- Two');
+ok('a numbered list', wio.htmlToMarkdown('<ol><li>One</li><li>Two</li></ol>').trim() === '1. One\n2. Two');
+const checklistHtml = '<ul class="write-checklist"><li><input type="checkbox">Done</li>' +
+  '<li><input type="checkbox" checked>Also done</li></ul>';
+ok('a checklist', wio.htmlToMarkdown(checklistHtml).trim() === '- [ ] Done\n- [x] Also done');
+ok('a quote', wio.htmlToMarkdown('<blockquote><p>Said.</p></blockquote>').trim() === '> Said.');
+ok('a code block', wio.htmlToMarkdown('<pre><code>const x = 1;</code></pre>').trim() === '```\nconst x = 1;\n```');
+ok('a horizontal rule', wio.htmlToMarkdown('<p>A</p><hr><p>B</p>').trim() === 'A\n\n---\n\nB');
+const tableHtml = '<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>';
+ok('a table', wio.htmlToMarkdown(tableHtml).trim() === '| A | B |\n| --- | --- |\n| 1 | 2 |');
+
+section('write: opening a file creates a document');
+const mdFile = new window.File(['# From disk\n\nHello **world**.'], 'notes.md', { type: 'text/markdown' });
+const mdCountBefore = writeState.writedocs.length;
+const mdId = await wio.openFilesAsWriteDocs([mdFile]);
+await wait(60);
+ok('a new document was added', writeState.writedocs.length === mdCountBefore + 1);
+const opened = writeState.writeDocById(mdId);
+ok('named after the file', opened.name === 'notes.md');
+ok('rendered from Markdown', /<h1>From disk<\/h1>/.test(opened.html));
+ok('the original is kept for "Download original"', opened.originalBlobOrText === mdFile && opened.originalName === 'notes.md');
+ok('and the Write view switched to show it',
+  /From disk/.test(q('#writeSheet').textContent) && /Hello/.test(q('#writeSheet').textContent));
+
+section('write: a binary file gets a friendly notice, not garbage');
+const binFile = new window.File([new Uint8Array([72, 101, 0, 108, 111])], 'weird.bin', { type: 'application/octet-stream' });
+const binId = await wio.openFilesAsWriteDocs([binFile]);
+await wait(60);
+const binDoc = writeState.writeDocById(binId);
+ok('it still becomes a document, with a notice rather than raw bytes', /binary file/i.test(binDoc.html));
+ok('the original bytes are kept', binDoc.originalBlobOrText === binFile);
+
+section('write: a large file asks first');
+const confirmCalls = [];
+const realConfirm = globalThis.confirm;
+globalThis.confirm = (msg) => { confirmCalls.push(msg); return false; };
+window.confirm = globalThis.confirm;
+const bigFile = new window.File([new Uint8Array(6 * 1024 * 1024)], 'huge.txt', { type: 'text/plain' });
+const bigCountBefore = writeState.writedocs.length;
+const bigId = await wio.openFilesAsWriteDocs([bigFile]);
+ok('declining the confirmation leaves it unopened',
+  bigId === null && writeState.writedocs.length === bigCountBefore && confirmCalls.length === 1);
+globalThis.confirm = realConfirm;
+window.confirm = realConfirm;
+
+section('write: the "file" toolbar group, the rail, and the Download menu');
+ok('the rail has an "Open file" button', !!q('#writeOpenFile'));
+ok('the toolbar "file" group has Open and Download', qa('.wt-group[data-group="file"] button').length === 2);
+const fileBtns = qa('.wt-group[data-group="file"] button');
+
+const menuDoc = await writedocsApi.addWriteDoc({
+  name: 'Menu test', html: '<h1>Title</h1><p>Body <b>text</b>.</p>',
+  originalName: 'menu-test.md', originalType: 'text/markdown', originalBlobOrText: 'Title\n\nBody text.'
+});
+const writeViewApi = await import('../assets/js/ui/write-view.js');
+writeViewApi.openWriteDoc(menuDoc.id);
+await wait(60);
+
+click(fileBtns[1]);
+await wait(30);
+ok('the download menu opens', q('.wio-menu') && !q('.wio-menu').hidden);
+const menuLabels = qa('.wio-item-label').map(n => n.textContent);
+ok('it offers HTML, Markdown, text, Word, print, copies and the original', [
+  'Download as HTML', 'Download as Markdown', 'Download as text', 'Download as Word',
+  'Print / Save as PDF', 'Copy as HTML', 'Copy as Markdown', 'Download original'
+].every(label => menuLabels.includes(label)), menuLabels.join(', '));
+
+const downloadsBefore = saved.downloads.length;
+const mdMenuItem = qa('.wio-item').find(b => /Download as Markdown/.test(b.textContent));
+click(mdMenuItem);
+await wait(30);
+ok('choosing "Download as Markdown" downloads a .md file',
+  saved.downloads.length === downloadsBefore + 1 && /\.md$/.test(saved.downloads[saved.downloads.length - 1]));
+ok('the menu closes after a choice', q('.wio-menu').hidden);
+
+click(fileBtns[1]);
+await wait(20);
+ok('and reopens', !q('.wio-menu').hidden);
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await wait(20);
+ok('Escape closes it', q('.wio-menu').hidden);
+
+section('write: a "Writing" section on Home, like Drawings and JSON');
+click(q('#tab-home'));
+await wait(60);
+ok('the section shows once there is a document', !q('#secWriting').hidden);
+ok('it counts them', /documents?$/.test(q('#writingCount').textContent));
+const writingRow = qa('#writeHomeRows .row-item').find(li => /Menu test/.test(li.textContent));
+ok('the document is listed', !!writingRow);
+click(writingRow.querySelector('.row-main'));
+await wait(80);
+ok('clicking it opens the Write view on that document',
+  shownViews() === 'view-write' && /Title/.test(q('#writeSheet').textContent) && /Body/.test(q('#writeSheet').textContent));
+
+click(q('#tab-home'));
+await wait(60);
+const homeNewCountBefore = writeState.writedocs.length;
+click(q('#qWrite'));
+await wait(80);
+ok('the "New document" quick action creates and opens a fresh one',
+  writeState.writedocs.length === homeNewCountBefore + 1 && shownViews() === 'view-write');
+ok('and it starts empty', (q('#writeSheet').textContent || '').trim() === '');
+
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');
 if (consoleErrors.length) {
   console.log('console errors:\n  ' + consoleErrors.join('\n  '));

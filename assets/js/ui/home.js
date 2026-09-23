@@ -10,13 +10,15 @@ import { PER_ROW_MAX, PER_ROW_MIN, RECENT_VISIBLE, HIGHLIGHTS } from '../core/co
 import { $, el } from '../core/dom.js';
 import { formatBytes, formatWhen, kindLabel, plural } from '../core/format.js';
 import {
-  byRecency, documents, files, notes, pastedDocs, prefs,
+  byRecency, documents, files, notes, pastedDocs, prefs, writedocs, writeDocsByRecency,
   anyPaneFor, noteCountFor, savePrefs
 } from '../core/state.js';
 import { describe, removeDoc } from '../features/library.js';
 import { openDoc, layoutAll } from '../features/panes.js';
 import { jumpToNote } from '../features/notes.js';
 import { applyHighlight } from '../features/highlight.js';
+import { addWriteDoc, removeWriteDoc } from '../features/writedocs.js';
+import { openWriteDoc } from './write-view.js';
 import {
   canPickDir, docItems, pasteItems, everythingItems,
   allNotesMarkdown, saveManyFiles, saveOneFile
@@ -48,10 +50,49 @@ export function renderHome() {
   $('#notesCount').textContent = notes.length ? plural(notes.length, 'note', 'notes') : '';
   notes.slice(0, 3).forEach(note => preview.appendChild(noteRow(note)));
 
+  renderWritingSection();
   renderPerRow();
   renderSwatches();
   renderExport();
 }
+
+/* ---------- Writing (Write documents) ---------- */
+
+function renderWritingSection() {
+  $('#secWriting').hidden = writedocs.length === 0;
+  $('#writingCount').textContent = writedocs.length ? plural(writedocs.length, 'document', 'documents') : '';
+  const rows = $('#writeHomeRows');
+  rows.innerHTML = '';
+  writeDocsByRecency().slice(0, RECENT_VISIBLE).forEach(rec => rows.appendChild(writingRow(rec)));
+}
+
+function writingRow(rec) {
+  const li = el('li', 'row-item');
+  const main = el('button', 'row-main');
+  main.type = 'button';
+  const name = el('div', 'row-name');
+  name.appendChild(el('span', 't', rec.name));
+  name.appendChild(el('span', 'kind', 'Document'));
+  main.append(name, el('div', 'row-sub', formatWhen(rec.updatedAt)));
+  main.addEventListener('click', () => openWriteDoc(rec.id));
+
+  const acts = el('div', 'row-act');
+  const del = el('button', 'btn tiny ghost danger', 'Remove');
+  del.type = 'button';
+  del.title = 'Remove from library';
+  del.addEventListener('click', e => { e.stopPropagation(); removeWriteDoc(rec.id); });
+  acts.appendChild(del);
+
+  li.append(main, acts);
+  return li;
+}
+
+async function newWriteDoc() {
+  const rec = await addWriteDoc({});
+  openWriteDoc(rec.id);
+}
+$('#qWrite').addEventListener('click', newWriteDoc);
+$('#newWriteLink').addEventListener('click', newWriteDoc);
 
 function renderPerRow() {
   const seg = $('#perRowSeg');
@@ -180,4 +221,4 @@ $('#expNotes').addEventListener('click', () => saveOneFile('folio-notes.md', all
 $('#expAll').addEventListener('click', () => saveManyFiles(everythingItems(), 'folio-everything'));
 
 /* Re-render whenever anything Home displays has changed. */
-[EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.PREFS].forEach(evt => on(evt, renderHome));
+[EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.PREFS, EVENTS.WRITEDOCS].forEach(evt => on(evt, renderHome));
