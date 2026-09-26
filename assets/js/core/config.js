@@ -5,8 +5,8 @@
 
 /* ---------- Storage ---------- */
 export const DB_NAME = 'folio';
-export const DB_VER = 7;
-export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images', 'compares', 'writedocs'];
+export const DB_VER = 8;
+export const STORES = ['files', 'notes', 'prefs', 'drawings', 'jsondocs', 'images', 'compares', 'writedocs', 'htmldocs'];
 
 /* ---------- Layout ---------- */
 export const PER_ROW_MIN = 1;
@@ -41,7 +41,8 @@ export const FILE_KINDS = {
   markdown: ['md', 'markdown', 'mdown', 'mkd', 'mdwn', 'txt', 'text'],
   pdf: ['pdf'],
   sheet: ['xlsx', 'xlsm', 'xlsb', 'xls', 'csv', 'tsv', 'ods'],
-  json: ['json', 'jsonc', 'geojson', 'ndjson', 'jsonl']
+  json: ['json', 'jsonc', 'geojson', 'ndjson', 'jsonl'],
+  html: ['html', 'htm', 'xhtml', 'mhtml', 'mht']
 };
 
 /* ---------- Limits ---------- */
@@ -124,6 +125,19 @@ export const JSON_MODES = [
   { key: 'code',  label: 'Code',  hint: 'Formatted and coloured, with line numbers' },
   { key: 'raw',   label: 'Raw',   hint: 'Exactly the text you opened, untouched' },
   { key: 'edit',  label: 'Edit',  hint: 'Change the text, with live validation' }
+];
+
+/* ---------- HTML preview ---------- */
+export const HTML_SAVE_MS = 600;      // debounce before an edit reaches storage
+export const HTML_CODE_MAX = 500000;  // chars before the code view stops colouring
+
+/** Three ways to look at a page: rendered, its source coloured, or editable.
+    Reading is the point — the preview is the default and the edit pane is a
+    mode you have to ask for. */
+export const HTML_MODES = [
+  { key: 'preview', label: 'Preview', hint: 'Rendered like a browser, with its own CSS and scripts' },
+  { key: 'code',    label: 'Code',    hint: 'The HTML source, formatted and coloured' },
+  { key: 'edit',    label: 'Edit',    hint: 'Change the HTML source' }
 ];
 
 /* ---------- The graph ---------- */

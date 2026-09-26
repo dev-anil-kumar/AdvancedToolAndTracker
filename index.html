@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="./assets/css/views.css">
 <link rel="stylesheet" href="./assets/css/canvas.css">
 <link rel="stylesheet" href="./assets/css/json.css">
+<link rel="stylesheet" href="./assets/css/html.css">
 <link rel="stylesheet" href="./assets/css/compare.css">
 <link rel="stylesheet" href="./assets/css/write.css">
 <link rel="stylesheet" href="./assets/css/write-media.css">
@@ -41,6 +42,7 @@
     <button role="tab" id="tab-write" aria-selected="false" aria-controls="view-write" tabindex="-1">Write <span class="n" id="tabWriteN"></span></button>
     <button role="tab" id="tab-canvas" aria-selected="false" aria-controls="view-canvas" tabindex="-1">Canvas <span class="n" id="tabCanvasN"></span></button>
     <button role="tab" id="tab-json" aria-selected="false" aria-controls="view-json" tabindex="-1">JSON <span class="n" id="tabJsonN"></span></button>
+    <button role="tab" id="tab-html" aria-selected="false" aria-controls="view-html" tabindex="-1">HTML <span class="n" id="tabHtmlN"></span></button>
     <button role="tab" id="tab-compare" aria-selected="false" aria-controls="view-compare" tabindex="-1">Compare <span class="n" id="tabCompareN"></span></button>
   </div>
 
@@ -132,6 +134,15 @@
           <button class="link" id="pasteJsonLink" type="button">Paste JSON</button>
         </div>
         <ul class="rows" id="jsonRows"></ul>
+      </section>
+
+      <section class="sec" id="secHtml" hidden>
+        <div class="sec-head">
+          <span class="sec-title">HTML</span>
+          <span class="sec-count" id="htmlCount"></span>
+          <button class="link" id="pasteHtmlLink" type="button">Paste HTML</button>
+        </div>
+        <ul class="rows" id="htmlRows"></ul>
       </section>
 
       <section class="sec" id="secCompares" hidden>
@@ -478,6 +489,68 @@
     </div>
   </section>
 
+  <!-- ================= HTML ================= -->
+  <section class="view" role="tabpanel" id="view-html" aria-labelledby="tab-html" tabindex="0" hidden>
+    <div class="hvtoolbar">
+      <div class="seg hvmodes" id="hvModes" role="group" aria-label="How to look at this page"></div>
+
+      <label class="sr" for="hvName">Page title</label>
+      <input class="hvname" id="hvName" type="text" autocomplete="off" spellcheck="false" placeholder="Untitled HTML">
+
+      <div class="hvsep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="hvReload" type="button" title="Re-run the page">Reload</button>
+      <button class="btn tiny ghost" id="hvScripts" type="button" aria-pressed="true"
+              title="Run the page's scripts. Turn off to read it safely without JavaScript.">Scripts</button>
+
+      <div class="spacer"></div>
+
+      <span class="hvmeta" id="hvStats"></span>
+      <span class="hvmeta saved" id="hvSaved"></span>
+
+      <div class="hvsep" aria-hidden="true"></div>
+
+      <button class="btn tiny ghost" id="hvPrint" type="button" title="Open the print dialog — choose “Save as PDF” to export">Export PDF</button>
+      <button class="btn tiny ghost" id="hvExport" type="button" title="Save as an .html file">Save</button>
+      <button class="btn tiny ghost" id="hvCopy" type="button" title="Copy the whole page source">Copy</button>
+      <button class="btn tiny ghost" id="hvOpen" type="button">Open</button>
+      <button class="btn tiny ghost" id="hvPaste" type="button">Paste</button>
+      <button class="btn tiny ghost" id="hvUrl" type="button">URL</button>
+      <button class="btn tiny ghost danger" id="hvRemove" type="button" title="Remove from the library">Remove</button>
+    </div>
+
+    <div class="hvbanner" id="hvBanner" hidden role="alert"></div>
+
+    <div class="hvstage" id="hvStage">
+      <iframe class="hvframe" id="hvFrame" title="HTML preview"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals allow-presentation"
+              referrerpolicy="no-referrer" hidden></iframe>
+
+      <div class="hvhost hvcode-host" id="hvCodeHost" hidden></div>
+
+      <div class="hvhost hvedit-host" id="hvEditHost" hidden>
+        <textarea id="hvEditArea" spellcheck="false" autocomplete="off" aria-label="HTML source"></textarea>
+      </div>
+
+      <div class="html-empty" id="hvEmpty">
+        <div class="box">
+          <h2>Nothing open</h2>
+          <p>Open an <code>.html</code> or <code>.mhtml</code> file, paste HTML, or drop a file anywhere
+             on the window. Everything you open is kept in this browser, like any other document.</p>
+          <p>The <strong>preview</strong> renders the page exactly as a browser would — its own CSS,
+             images and scripts included. Read it full-width, switch to the coloured <strong>code</strong>,
+             or open the <strong>edit</strong> pane when you need to change something. Export the result
+             as a PDF or save it back out as a single <code>.html</code> file.</p>
+          <div class="empty-acts">
+            <button class="btn primary" id="hvEmptyOpen" type="button">Open file</button>
+            <button class="btn" id="hvEmptyPaste" type="button">Paste HTML</button>
+            <button class="btn ghost" id="hvEmptySample" type="button">Sample page</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ================= COMPARE ================= -->
   <section class="view" role="tabpanel" id="view-compare" aria-labelledby="tab-compare" tabindex="0" hidden>
     <div class="jtoolbar ctoolbar">
@@ -579,6 +652,7 @@
        accept=".md,.markdown,.mdown,.mkd,.mdwn,.txt,.text,.pdf,.xlsx,.xlsm,.xlsb,.xls,.csv,.tsv,.ods,text/markdown,text/plain,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet">
 <input type="file" id="drawingInput" accept=".json,application/json" class="sr" multiple>
 <input type="file" id="jsonInput" accept=".json,.jsonc,.geojson,.ndjson,.jsonl,.txt,application/json,text/plain" class="sr" multiple>
+<input type="file" id="htmlInput" accept=".html,.htm,.xhtml,.mhtml,.mht,text/html,application/xhtml+xml,multipart/related,message/rfc822" class="sr" multiple>
 <input type="file" id="compareInput" class="sr" multiple>
 <input type="file" id="noteImageInput" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif" class="sr" multiple>
 
@@ -762,6 +836,44 @@
     <div class="dlg-acts">
       <button class="btn ghost" type="button" data-close>Cancel</button>
       <button class="btn primary" id="jsonUrlSubmit" type="submit">Download &amp; open</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="htmlDlg" aria-labelledby="htmlDlgTitle">
+  <div class="dlg-head">
+    <h2 id="htmlDlgTitle">Paste HTML</h2>
+    <p>A whole page, or a fragment — Folio keeps it in your library like any other document and
+       renders it exactly as a browser would, its own CSS and scripts included.</p>
+  </div>
+  <form class="dlg-body" id="htmlForm">
+    <label class="field-label" for="htmlTitle">Title <span style="font-weight:400;color:var(--ink-3)">(optional)</span></label>
+    <input class="input" id="htmlTitle" type="text" autocomplete="off" placeholder="Taken from the page's &lt;title&gt; if left blank">
+    <label class="field-label" for="htmlText">HTML</label>
+    <textarea class="input" id="htmlText" spellcheck="false" placeholder="&lt;!doctype html&gt;&#10;&lt;html&gt; … &lt;/html&gt;" required></textarea>
+    <div class="dlg-err" id="htmlErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Open</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="htmlUrlDlg" aria-labelledby="htmlUrlTitle">
+  <div class="dlg-head">
+    <h2 id="htmlUrlTitle">Open HTML from a URL</h2>
+    <p>A direct link to an <code>.html</code> or <code>.mhtml</code> file. Folio downloads it into
+       this browser.</p>
+  </div>
+  <form class="dlg-body" id="htmlUrlForm">
+    <label class="field-label" for="htmlUrlField">File URL</label>
+    <input class="input" id="htmlUrlField" type="url" inputmode="url" spellcheck="false" autocomplete="off"
+           placeholder="https://example.com/page.html" required>
+    <p class="dlg-note">The server must allow cross-origin reads (<code>Access-Control-Allow-Origin</code>).</p>
+    <div class="dlg-err" id="htmlUrlErr"></div>
+    <div class="dlg-acts">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn primary" id="htmlUrlSubmit" type="submit">Download &amp; open</button>
     </div>
   </form>
 </dialog>
@@ -1016,6 +1128,83 @@ leaves the page except the request that fetches a URL you asked for. Clearing si
 clears Folio.
 
 *Happy reading.*
+</script>
+
+<!-- Sample HTML: a small, self-contained page that shows the preview doing its
+     job — its own CSS (a gradient, a grid, a web font stack), an image drawn
+     inline as an SVG data URI, and a touch of JavaScript that runs on load. -->
+<script id="sample-html" type="text/html">
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Folio — sample page</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1c2330;
+      background: #f6f8fb;
+    }
+    header {
+      padding: 56px 32px;
+      color: #fff;
+      background: linear-gradient(135deg, #1f6f95 0%, #6c5aa8 100%);
+    }
+    header h1 { margin: 0 0 8px; font-size: 34px; letter-spacing: -0.02em; }
+    header p { margin: 0; opacity: 0.9; }
+    main { max-width: 820px; margin: -28px auto 48px; padding: 0 24px; }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e8ef;
+      border-radius: 14px;
+      padding: 24px 26px;
+      margin: 24px 0;
+      box-shadow: 0 8px 30px rgba(20, 32, 60, 0.06);
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+    .tile { padding: 18px; border-radius: 10px; background: #eef3f8; text-align: center; }
+    .tile b { display: block; font-size: 24px; color: #1f6f95; }
+    button {
+      font: inherit; cursor: pointer; border: 0; border-radius: 8px;
+      padding: 10px 18px; color: #fff; background: #1f6f95;
+    }
+    button:hover { background: #185876; }
+    #clock { font-variant-numeric: tabular-nums; font-weight: 600; }
+    code { background: #eef3f8; padding: 2px 6px; border-radius: 5px; }
+    figure { margin: 0; text-align: center; }
+    figcaption { color: #6b7686; font-size: 14px; margin-top: 8px; }
+  </style>
+</head>
+<body onload="var f=function(){document.getElementById('clock').textContent=new Date().toLocaleTimeString();};f();setInterval(f,1000);">
+  <header>
+    <h1>Rendered like a browser</h1>
+    <p>This page's own CSS, an inline image, and a little JavaScript — all live in the preview.</p>
+  </header>
+  <main>
+    <div class="card">
+      <p>Folio shows this exactly as Chrome would. Switch to <code>Code</code> to read the source,
+         or <code>Edit</code> to change it — then <b>Export PDF</b> or <b>Save</b> it back out.</p>
+      <div class="grid">
+        <div class="tile"><b id="count">0</b>clicks counted</div>
+        <div class="tile"><b id="clock">—</b>live clock</div>
+        <div class="tile"><b>100%</b>offline</div>
+      </div>
+      <p style="margin-top:18px"><button onclick="var c=document.getElementById('count');c.textContent=String(+c.textContent+1);">Count a click</button></p>
+    </div>
+    <div class="card">
+      <figure>
+        <img width="120" height="120" alt="A drawn star"
+             src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,5 61,39 97,39 68,61 79,95 50,74 21,95 32,61 3,39 39,39' fill='%23c98a1b'/></svg>">
+        <figcaption>An SVG drawn straight from a data URI — no file to lose.</figcaption>
+      </figure>
+    </div>
+  </main>
+</body>
+</html>
 </script>
 
 <!-- ---------- Libraries (pinned) ---------- -->

@@ -1,0 +1,84 @@
+/* ---------------------------------------------------------------
+   The HTML view: toolbar, the preview frame, code, source pane.
+   Colours come from tokens.css; nothing here invents one — except the
+   frame's own white, which a web page is entitled to expect.
+   --------------------------------------------------------------- */
+
+#view-html{padding:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- Toolbar ----------
+   Deliberately the same furniture as the JSON view, so the two readers feel
+   like one app. Reuses .jname/.jmeta/.jsep and the .seg mode switch. */
+.hvtoolbar{
+  flex:none;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:8px clamp(10px,2vw,16px);border-bottom:1px solid var(--line);
+  background:var(--bg);
+}
+.hvtoolbar .seg{flex:none}
+.hvtoolbar .seg button{font-size:12.5px;padding:4px 11px}
+.hvtoolbar .spacer{flex:1}
+
+/* ---------- The stage ----------
+   The reading surface should be as large as the window allows: no padding, no
+   frame, the page filling every pixel the toolbar leaves behind. */
+#hvStage{position:relative;flex:1;min-height:0;display:flex}
+
+/* ---------- The error banner ----------
+   It lives inside the stage, so it lays over the top of the frame rather than
+   taking a column of its own beside it — and it is hidden until something
+   actually breaks. */
+#hvBanner{
+  position:absolute;top:0;left:0;right:0;z-index:3;
+  padding:8px clamp(10px,2vw,16px);font-size:12.5px;
+  color:var(--danger);background:color-mix(in srgb,var(--danger) 12%, var(--bg));
+  border-bottom:1px solid color-mix(in srgb,var(--danger) 26%, var(--line));
+}
+#hvBanner strong{font-weight:600}
+
+/* ---------- Preview ----------
+   A page with no background of its own renders on white here, exactly as it
+   would in a browser tab — so the frame keeps its white even under the dark
+   theme, while the chrome around it follows the theme like everything else. */
+#hvFrame{
+  flex:1;width:100%;height:100%;border:0;
+  background:#fff;
+}
+
+/* ---------- Code ---------- */
+#hvCodeHost{
+  flex:1;min-width:0;overflow:auto;background:var(--surface);
+}
+.hvcode{
+  margin:0;padding:12px clamp(10px,2vw,18px) 40px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;line-height:1.62;white-space:pre;tab-size:2;
+  color:var(--ink-2);
+}
+.hvcode code{font:inherit;color:inherit}
+/* highlight.js paints its own spans; keep it transparent so the surface, not
+   the theme's code-block black, shows through. */
+.hvcode.hljs{background:transparent;padding:12px clamp(10px,2vw,18px) 40px}
+
+/* ---------- The source pane ---------- */
+#hvEditHost{flex:1;min-width:0;display:flex}
+#hvEditArea{
+  flex:1;width:100%;border:0;resize:none;outline:none;
+  padding:12px clamp(10px,2vw,18px) 40px;
+  background:var(--surface);color:var(--ink);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.75px;line-height:1.62;tab-size:2;
+}
+
+/* ---------- Empty state ----------
+   The same box the JSON view uses, named for this view. */
+.html-empty{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:var(--bg)}
+.html-empty .box{max-width:56ch;text-align:center}
+.html-empty h2{margin:0 0 8px;font-size:1.05rem;font-weight:600;letter-spacing:-.015em}
+.html-empty p{margin:0 0 10px;color:var(--ink-3);font-size:13.5px;line-height:1.65}
+.html-empty code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--bg-tint);border:1px solid var(--line);border-radius:4px;padding:.1em .35em}
+.html-empty strong{color:var(--ink-2);font-weight:600}
+
+@media (max-width:820px){
+  .hvtoolbar{gap:5px;padding:7px 10px}
+  .hvtoolbar .jname{width:120px}
+}

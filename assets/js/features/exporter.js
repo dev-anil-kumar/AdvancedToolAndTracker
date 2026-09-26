@@ -15,6 +15,7 @@ import { resolve } from './note-images.js';
 const FILE_TYPES = {
   md:   { ext: '.md',   mime: 'text/markdown', label: 'Markdown', accept: ['.md', '.markdown'] },
   json: { ext: '.json', mime: 'application/json', label: 'Folio drawing', accept: ['.json'] },
+  html: { ext: '.html', mime: 'text/html', label: 'Web page', accept: ['.html', '.htm'] },
   svg:  { ext: '.svg',  mime: 'image/svg+xml', label: 'SVG image', accept: ['.svg'] },
   png:  { ext: '.png',  mime: 'image/png', label: 'PNG image', accept: ['.png'] },
   diff: { ext: '.diff', mime: 'text/x-diff', label: 'Unified diff', accept: ['.diff', '.patch'] }
@@ -35,7 +36,7 @@ export function safeName(name, ext) {
   if (n.toLowerCase().endsWith(suffix.toLowerCase())) return n;
   /* Every extension the app reads or writes, so "report.pdf" saved as
      Markdown is "report.md" rather than "report.pdf.md". */
-  return n.replace(/\.(md|markdown|mdown|mkd|txt|json|svg|png|pdf|xlsx|xlsm|xlsb|xls|csv|tsv|ods)$/i, '') + suffix;
+  return n.replace(/\.(md|markdown|mdown|mkd|txt|json|svg|png|pdf|xlsx|xlsm|xlsb|xls|csv|tsv|ods|html|htm|xhtml|mhtml|mht)$/i, '') + suffix;
 }
 
 function uniqueName(used, prefix, name) {

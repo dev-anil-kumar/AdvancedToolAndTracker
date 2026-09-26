@@ -21,7 +21,7 @@ import { $ } from './core/dom.js';
 import { dbAll } from './core/db.js';
 import { hashView, route } from './core/router.js';
 import {
-  loadPrefs, setActiveWs, setCompares, setDrawings, setFiles, setImages, setJsonDocs, setNotes, setWriteDocs, workspaces
+  loadPrefs, setActiveWs, setCompares, setDrawings, setFiles, setHtmlDocs, setImages, setJsonDocs, setNotes, setWriteDocs, workspaces
 } from './core/state.js';
 
 import { applyTheme, toggleTheme } from './features/theme.js';
@@ -39,6 +39,7 @@ import { openNoteEditor } from './ui/note-editor.js';
 import { promptPaste, promptUrl } from './ui/dialogs.js';
 import { pickDrawingFile, renderDrawings } from './ui/canvas-view.js';
 import { openJsonFiles, renderJsonDocs } from './ui/json-view.js';
+import { openHtmlFiles, renderHtmlDocs } from './ui/html-view.js';
 import { acceptCompareDrop, renderCompares } from './ui/compare-view.js';
 import { renderWriteDocs } from './ui/write-view.js';
 import { openFilesAsWriteDocs } from './features/write/io.js';
@@ -93,8 +94,10 @@ addEventListener('drop', e => {
      on the way in. A drawing dropped on the canvas never reaches here — that
      handler stops it, as does an image dropped on the note editor. */
   const json = dropped.filter(f => sniff(f) === 'json');
-  const docs = dropped.filter(f => sniff(f) !== 'json');
+  const html = dropped.filter(f => sniff(f) === 'html');
+  const docs = dropped.filter(f => sniff(f) !== 'json' && sniff(f) !== 'html');
   if (json.length) openJsonFiles(json);
+  if (html.length) openHtmlFiles(html);
   if (docs.length) handleFiles(docs);
 });
 
@@ -104,9 +107,9 @@ addEventListener('drop', e => {
   initShell();
 
   try {
-    const [f, n, dr, js, im, cm, wr] = await Promise.all([
+    const [f, n, dr, js, im, cm, wr, ht] = await Promise.all([
       dbAll('files'), dbAll('notes'), dbAll('drawings'), dbAll('jsondocs'), dbAll('images'), dbAll('compares'),
-      dbAll('writedocs')
+      dbAll('writedocs'), dbAll('htmldocs')
     ]);
     setFiles(f || []);
     setNotes((n || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
@@ -115,6 +118,7 @@ addEventListener('drop', e => {
     setImages(im || []);
     setCompares(cm || []);
     setWriteDocs(wr || []);
+    setHtmlDocs(ht || []);
   } catch (err) {
     console.warn('Folio: could not read saved data', err);
   }
@@ -130,6 +134,7 @@ addEventListener('drop', e => {
   renderNotes();
   renderDrawings();
   renderJsonDocs();
+  renderHtmlDocs();
   renderCompares();
   renderWriteDocs();
   emit(EVENTS.PANES);

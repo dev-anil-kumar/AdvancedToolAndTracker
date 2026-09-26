@@ -11,10 +11,11 @@ export const VIEWS = {
   notes: { tab: 'tab-notes', view: 'view-notes' },
   canvas: { tab: 'tab-canvas', view: 'view-canvas' },
   json: { tab: 'tab-json', view: 'view-json' },
+  html: { tab: 'tab-html', view: 'view-html' },
   compare: { tab: 'tab-compare', view: 'view-compare' },
   write: { tab: 'tab-write', view: 'view-write' }
 };
-export const tabOrder = ['home', 'read', 'notes', 'write', 'canvas', 'json', 'compare'];
+export const tabOrder = ['home', 'read', 'notes', 'write', 'canvas', 'json', 'html', 'compare'];
 let current = 'home';
 
 export function route(name, opts) {
