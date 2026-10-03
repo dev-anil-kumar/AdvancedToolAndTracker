@@ -699,7 +699,7 @@ section('canvas: creating a drawing');
 click(q('#canvasNew'));
 await wait(200);
 ok('canvas view is showing', shownViews() === 'view-canvas', shownViews());
-ok('tool strip built', qa('#cTools .ctool').length === 7, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
+ok('tool strip built', qa('#cTools .ctool').length === 8, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
 ok('rectangle is the default tool', editor0.activeTool() === 'rect', editor0.activeTool());
 ok('background swatches built', qa('#cFills .swatch').length === 6);
 ok('font choices built', qa('#cFonts button').length === 3, qa('#cFonts button').map(b => b.dataset.font).join(','));
@@ -875,7 +875,7 @@ click(qa('#cFills .swatch').find(b => b.dataset.fill === 'none'));
 await wait(60);
 ok('background can be cleared', box().fill === 'none' &&
   d.querySelector('#scene .shape[data-kind="rect"] rect').getAttribute('fill') === 'none');
-ok('font defaults to sans', box().font === 'sans');
+ok('font defaults to hand', box().font === 'hand');
 click(qa('#cFonts button').find(b => b.dataset.font === 'hand'));
 await wait(60);
 ok('font changed on the selection', box().font === 'hand', String(box().font));
@@ -1075,6 +1075,20 @@ ok('bring to front moves it last in the scene', shapes().at(-1).id !== lastId &&
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: '[', metaKey: true, bubbles: true }));
 await wait(50);
 ok('send to back moves it first', shapes()[0].kind === 'rect');
+
+section('canvas: loose arrow ends attach, cards split title from body');
+{
+  const m = await import('../assets/js/features/canvas/model.js');
+  const box = { id: 'b1', kind: 'rect', x: 100, y: 0, w: 80, h: 40 };
+  const frame = { id: 'f1', kind: 'container', x: -200, y: -200, w: 600, h: 600 };
+  const free = { id: 'a1', kind: 'arrow', points: [0, 20, 90, 20], from: null, to: null };
+  const s = { shapes: [frame, box, free] };
+  m.attachLooseEnds(s, 15);
+  ok('an end near a shape attaches to it', free.to === 'b1', String(free.to));
+  ok('an end deep inside a container stays loose', free.from === null, String(free.from));
+  const c = m.splitCard('Plan\nstep one\nstep two');
+  ok('card title is the first line', c.title === 'Plan' && c.body === 'step one\nstep two');
+}
 
 section('canvas: the tool can be locked');
 ok('lock starts off', q('#cLock').getAttribute('aria-pressed') === 'false');

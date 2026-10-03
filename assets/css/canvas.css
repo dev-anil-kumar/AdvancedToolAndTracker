@@ -56,6 +56,20 @@
 #scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 #scene .grid circle { fill: var(--line-strong); opacity: .5; }
+#scene .grid line { stroke: var(--grid-line, #cfe0ee); stroke-width: .6; }
+
+/* Themes. Paper is the default; Dark inverts the drawing the way Excalidraw
+   does, so every ink keeps its contrast without a second palette. */
+.canvas-host[data-theme="paper"] { background: #fbfaf6; }
+.canvas-host[data-theme="paper"] #scene .grid circle { fill: #c9c3b4; }
+.canvas-host[data-theme="grid"] { background: #fdfefe; }
+.canvas-host[data-theme="blank"] { background: #ffffff; }
+.canvas-host[data-theme="dark"] { background: #1d1e21; }
+.canvas-host[data-theme="dark"] #scene { filter: invert(.93) hue-rotate(180deg); }
+.ctheme {
+  font: inherit; font-size: 12px; color: var(--ink-2); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px;
+}
 #scene .shape { cursor: pointer; }
 #scene .shape.preview { opacity: .65; }
 #scene .shape .hit { stroke: transparent; stroke-width: 14; fill: none; }
@@ -64,7 +78,11 @@
 #scene .label { pointer-events: none; user-select: none; }
 #scene .label.badge { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
 #scene .selection > rect { stroke: var(--accent); stroke-dasharray: 4 3; }
-#scene .handle { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5; cursor: nwse-resize; }
+#scene .handle { fill: var(--surface); stroke: var(--accent); cursor: nwse-resize; }
+#scene .edge { stroke: transparent; }
+#scene .edge[data-handle="n"], #scene .edge[data-handle="s"] { cursor: ns-resize; }
+#scene .edge[data-handle="e"], #scene .edge[data-handle="w"] { cursor: ew-resize; }
+#scene .edge:hover { stroke: var(--accent-soft); }
 #scene .selection .handle[data-handle="p1"],
 #scene .selection .handle[data-handle="p2"] { cursor: move; }
 
@@ -93,8 +111,18 @@
   padding: .1em .38em; background: var(--surface); color: var(--ink-2);
 }
 
-/* Focus mode strips the canvas back to the drawing too. */
-body.zen .ctoolbar { display: none !important; }
+/* Focus mode: the toolbar floats over a full-bleed canvas, holding only the
+   tools, undo and — while something is selected or being drawn — the styles. */
+body.zen #view-canvas { position: fixed; inset: 0; z-index: 20; }
+body.zen .ctoolbar {
+  position: absolute; z-index: 9; top: 10px; left: 50%; transform: translateX(-50%);
+  width: max-content; max-width: calc(100% - 32px);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--pop);
+}
+body.zen .ctoolbar > :is(.csep, .spacer, #cName, .cmeta, #cLabel, #cDetach, #cFront, #cBack,
+  #cZoomOut, #cZoomIn, #cFit, #cNew, #cImport, #cExportJson, #cExportSvg, #cExportPng, #cTheme, #cHelp) { display: none; }
+body.zen .ctoolbar[data-styling="false"] :is(#cInks, #cFills, #cFonts) { display: none; }
+body.zen[data-view="canvas"] .zen-exit { display: none; }
 
 @media (max-width: 820px) {
   .ctoolbar { gap: 5px; padding: 7px 10px; }
@@ -104,10 +132,10 @@ body.zen .ctoolbar { display: none !important; }
 
 /* ---------- Connections, marquee and multi-select ---------- */
 #scene .port {
-  fill: var(--surface); stroke: var(--accent); stroke-width: 1.6;
-  cursor: crosshair; transition: r .12s ease;
+  fill: var(--surface); stroke: var(--accent);
+  cursor: crosshair;
 }
-#scene .port:hover { fill: var(--accent); r: 6; }
+#scene .port:hover { fill: var(--accent); }
 #scene .marquee { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 4 3; }
 #scene .shape.hover-target > rect,
 #scene .shape.hover-target > ellipse {
@@ -122,6 +150,7 @@ body.zen .ctoolbar { display: none !important; }
 .text-edit { z-index: 8; }
 .text-edit textarea { pointer-events: auto; }
 .text-edit[data-kind="container"] textarea,
+.text-edit[data-kind="card"] textarea,
 .text-edit[data-kind="text"] textarea { text-align: left; }
 
 /* ---------- Backgrounds, fonts and the text box ---------- */

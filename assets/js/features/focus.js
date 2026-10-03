@@ -12,7 +12,7 @@ import { hideSelPop } from './notes.js';
 
 /* The two views calm enough to be worth hiding the chrome for. Zen never
    forces a move away from either — only out of a view neither name lists. */
-const ZEN_VIEWS = new Set(['read', 'write']);
+const ZEN_VIEWS = new Set(['read', 'write', 'canvas']);
 
 let zen = false;
 export function setZen(wanted) {
@@ -34,5 +34,6 @@ on(EVENTS.VIEW, name => { if (!ZEN_VIEWS.has(name) && zen) setZen(false); });
 /* Escape is the way out. Owned here rather than in the notes key handler, so
    the two features stay independent. */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && zen) setZen(false);
+  /* On the canvas Escape already means "deselect"; M and the corner button leave. */
+  if (e.key === 'Escape' && zen && currentView() !== 'canvas') setZen(false);
 });

@@ -90,16 +90,27 @@ export const DEFAULT_FILLS = {
   rect: 'harbor',
   ellipse: 'amber',
   container: 'graphite',
+  card: 'none',
   note: 'none',
   text: 'none',
   arrow: 'none'
 };
 
-/** Three fonts, each with the size tweak that makes it sit right. */
+/** Three fonts, each with the size tweak that makes it sit right, and its
+    average character width in ems — what text wrapping estimates with. */
 export const FONTS = [
-  { key: 'sans', label: 'Sans', stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif', scale: 1 },
-  { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif', scale: 1.06 },
-  { key: 'hand', label: 'Hand', stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive', scale: 1.42 }
+  { key: 'sans', label: 'Sans', stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif', scale: 1, charW: 0.52 },
+  { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif', scale: 1.06, charW: 0.5 },
+  { key: 'hand', label: 'Hand', stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive', scale: 1.42, charW: 0.36 }
+];
+
+/** Canvas backgrounds. The first is the default: warm paper with dots, which
+    keeps the hand-drawn look and stays out of the way. */
+export const CANVAS_THEMES = [
+  { key: 'paper', label: 'Paper' },
+  { key: 'grid',  label: 'Graph paper' },
+  { key: 'blank', label: 'Blank' },
+  { key: 'dark',  label: 'Dark' }
 ];
 
 /* ---------- JSON viewer ---------- */

@@ -374,6 +374,9 @@
       <button class="btn tiny ghost" id="cExportJson" type="button" title="Export as a Folio drawing (.json)">Export</button>
       <button class="btn tiny ghost" id="cExportSvg" type="button" title="Export as a vector image (.svg)">SVG</button>
       <button class="btn tiny ghost" id="cExportPng" type="button" title="Export as a picture (.png)">PNG</button>
+      <label class="sr" for="cTheme">Canvas background</label>
+      <select class="ctheme" id="cTheme" title="Canvas background"></select>
+      <button class="btn tiny ghost" id="cMax" type="button" aria-pressed="false" title="Focus mode — just the drawing and the tools you need (M)">Focus</button>
       <button class="btn tiny ghost" id="cHelp" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
     </div>
 
@@ -388,7 +391,7 @@
         <div class="box">
           <h2>An empty canvas</h2>
           <p>Press <kbd>R</kbd> for a rectangle, <kbd>C</kbd> for a circle, <kbd>A</kbd> for an arrow, then drag.
-             <kbd>F</kbd> draws a container — anything you put inside travels with it.</p>
+             <kbd>F</kbd> draws a container — anything you put inside travels with it, <kbd>B</kbd> a card with a title and body.</p>
           <p>Shapes line up with each other as you drag them. Press <kbd>?</kbd> for every shortcut.
              Every object takes text: double-click it, or select it and press <kbd>Enter</kbd>.
              Select a shape and drag a side dot to pull out an arrow that stays attached.

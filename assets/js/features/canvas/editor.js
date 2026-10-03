@@ -13,14 +13,14 @@
  * buys more than the frames it costs.
  */
 import {
-  ARROW_HEAD, AUTOSAVE_MS, CANVAS_FONT, DEFAULT_TOOL, GRID, HISTORY_MAX,
+  ARROW_HEAD, AUTOSAVE_MS, CANVAS_FONT, CANVAS_THEMES, DEFAULT_TOOL, GRID, HISTORY_MAX,
   MIN_SHAPE, STROKE_W, ZOOM_MAX, ZOOM_MIN, INKS
 } from '../../core/config.js';
 import { $, clamp } from '../../core/dom.js';
 import { toast } from '../../core/toast.js';
 import { saveDrawing } from '../drawings.js';
 import {
-  arrowEnds, bindArrow, bounds, centre, connectTargetAt, constrainBox, constrainLine,
+  arrowEnds, attachLooseEnds, bindArrow, hitTest, splitCard, bounds, centre, connectTargetAt, constrainBox, constrainLine,
   boundsOfAll, defaultSized, drawOrder, fillColour, fontOf, intersectsRect, isCentred,
   makeShape, moveShape, reparentAll, sceneBounds, serialize, shapeAt, shapeById, snap,
   snapCandidates, snapToGuides, syncArrows, textHeight, wrapText
@@ -37,7 +37,8 @@ let scene = null;
 let tool = DEFAULT_TOOL;
 let ink = INKS[0].hex;
 let fillKey = null;              // null = each kind's own default
-let fontKey = 'sans';
+let fontKey = 'hand';
+let theme = readTheme();
 let clipboard = [];
 let toolLocked = false;          // keep the tool after drawing, for repeat work
 let selectedIds = new Set();
@@ -58,7 +59,30 @@ export function attachEditor(handlers) {
   host.addEventListener('pointermove', onHover);
   host.addEventListener('dblclick', onDoubleClick);
   host.addEventListener('wheel', onWheel, { passive: false });
-  addEventListener('resize', () => { if (scene) render(); });
+  host.dataset.theme = theme;
+  /* Covers window resizes and focus mode, which resizes the host with no window event. */
+  if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (scene) render(); }).observe(host);
+  else addEventListener('resize', () => { if (scene) render(); });
+}
+
+/* ---------- Canvas theme: a per-browser preference, not part of the drawing ---------- */
+
+function readTheme() {
+  try {
+    const saved = localStorage.getItem('folio.canvasTheme');
+    if (CANVAS_THEMES.some(t => t.key === saved)) return saved;
+  } catch (err) { /* storage blocked — the default will do */ }
+  return CANVAS_THEMES[0].key;
+}
+
+export const activeTheme = () => theme;
+export function setTheme(key) {
+  theme = key;
+  try { localStorage.setItem('folio.canvasTheme', key); } catch (err) { /* session only */ }
+  const host = $('#canvasHost');
+  if (host) host.dataset.theme = key;
+  render();
+  onChange();
 }
 
 export function loadScene(next) {
@@ -257,6 +281,7 @@ export function render() {
   svg.setAttribute('viewBox', scene.view.x + ' ' + scene.view.y + ' ' + w + ' ' + h);
 
   const frag = document.createDocumentFragment();
+  frag.appendChild(sketchDefs());
   frag.appendChild(gridLayer(scene.view.x, scene.view.y, w, h));
   drawOrder(scene).forEach(s => frag.appendChild(shapeNode(s)));
 
@@ -286,9 +311,27 @@ function guideLayer(guides, w, h) {
   return g;
 }
 
+/**
+ * The hand-drawn look: a little noise displaces each outline, so straight
+ * edges wobble like a pen stroke. Pure SVG, so exports keep it too.
+ */
+function sketchDefs() {
+  const defs = svgEl('defs');
+  const f = defs.appendChild(svgEl('filter', { id: 'sketch', x: '-5%', y: '-5%', width: '110%', height: '110%' }));
+  f.appendChild(svgEl('feTurbulence', { type: 'fractalNoise', baseFrequency: 0.035, numOctaves: 2, seed: 7 }));
+  f.appendChild(svgEl('feDisplacementMap', { in: 'SourceGraphic', scale: 3.5 }));
+  return defs;
+}
+
 function gridLayer(x, y, w, h) {
   const g = svgEl('g', { class: 'grid', 'aria-hidden': 'true' });
   const first = (v) => Math.floor(v / GRID) * GRID;
+  if (theme === 'blank') return g;
+  if (theme === 'grid') {
+    for (let gx = first(x); gx < x + w + GRID; gx += GRID) g.appendChild(svgEl('line', { x1: gx, y1: y, x2: gx, y2: y + h }));
+    for (let gy = first(y); gy < y + h + GRID; gy += GRID) g.appendChild(svgEl('line', { x1: x, y1: gy, x2: x + w, y2: gy }));
+    return g;
+  }
   for (let gx = first(x); gx < x + w + GRID; gx += GRID) {
     for (let gy = first(y); gy < y + h + GRID; gy += GRID) {
       g.appendChild(svgEl('circle', { cx: gx, cy: gy, r: 1 }));
@@ -331,12 +374,12 @@ function shapeNode(s, preview) {
   if (s.kind === 'ellipse') {
     g.appendChild(svgEl('ellipse', {
       cx: s.x + s.w / 2, cy: s.y + s.h / 2, rx: Math.max(1, s.w / 2), ry: Math.max(1, s.h / 2),
-      fill, stroke: s.ink, 'stroke-width': STROKE_W
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
     }));
   } else if (s.kind === 'container') {
     g.appendChild(svgEl('rect', {
       x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h), rx: 10,
-      fill, stroke: s.ink, 'stroke-width': STROKE_W, 'stroke-dasharray': '7 5'
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)', 'stroke-dasharray': '7 5'
     }));
   } else if (s.kind === 'note') {
     /* A text container: no boundary of its own. It shows a faint dashed edge
@@ -350,10 +393,20 @@ function shapeNode(s, preview) {
       'stroke-opacity': bare ? 0.5 : 0,
       class: 'note-edge'
     }));
+  } else if (s.kind === 'card') {
+    const { titleH } = cardLayout(s);
+    g.appendChild(svgEl('rect', {
+      x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h), rx: 10,
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
+    }));
+    g.appendChild(svgEl('line', {
+      x1: s.x, y1: s.y + titleH, x2: s.x + s.w, y2: s.y + titleH,
+      stroke: s.ink, 'stroke-width': STROKE_W * 0.75, 'stroke-opacity': 0.6, filter: 'url(#sketch)'
+    }));
   } else if (s.kind === 'rect') {
     g.appendChild(svgEl('rect', {
       x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h), rx: 7,
-      fill, stroke: s.ink, 'stroke-width': STROKE_W
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
     }));
   } else {
     g.appendChild(svgEl('rect', {
@@ -362,7 +415,12 @@ function shapeNode(s, preview) {
     }));
   }
 
-  if (s.text) {
+  if (s.kind === 'card') {
+    const { title, body } = splitCard(s.text);
+    const { size, titleH } = cardLayout(s);
+    g.appendChild(textNode({ ...s, text: title || 'Title', bold: true }, s.x + 12, s.y + 8 + size, 'start', false, !title));
+    g.appendChild(textNode({ ...s, text: s.text ? body : 'Body' }, s.x + 12, s.y + titleH + 8 + size, 'start', false, !s.text));
+  } else if (s.text) {
     if (s.kind === 'container') g.appendChild(textNode(s, s.x + 12, s.y + 20, 'start'));
     else if (s.kind === 'text') g.appendChild(textNode(s, s.x, s.y + CANVAS_FONT, 'start'));
     else g.appendChild(textNode(s, s.x + s.w / 2, s.y + s.h / 2, 'middle'));
@@ -383,8 +441,7 @@ function textNode(s, cx, cy, anchor, badge, faded) {
   const font = fontOf(s.font);
   const size = CANVAS_FONT * font.scale;
   const lineHeight = size * 1.3;
-  const maxChars = Math.max(6, Math.floor((box.w - 18) / (size * 0.52)));
-  const lines = wrapText(s.text, s.kind === 'arrow' ? 26 : maxChars);
+  const lines = wrapText(s.text, s.kind === 'arrow' ? 26 : fitChars(box.w, s));
   const centred = anchor === 'middle' || badge;
 
   /*
@@ -404,13 +461,24 @@ function textNode(s, cx, cy, anchor, badge, faded) {
     fill: faded ? 'var(--ink-3)' : s.ink,
     'font-size': size.toFixed(1),
     'font-family': font.stack,
-    'font-weight': s.kind === 'container' ? 600 : 400,
+    'font-weight': s.kind === 'container' || s.bold ? 600 : 400,
     class: 'label' + (badge ? ' badge' : '')
   });
   lines.forEach((line, i) => {
     text.appendChild(svgEl('tspan', { x: cx, dy: i === 0 ? 0 : lineHeight })).textContent = line;
   });
   return text;
+}
+
+/** How many characters fit across a width — the same estimate everywhere text wraps. */
+const charWidth = (s) => CANVAS_FONT * fontOf(s.font).scale * fontOf(s.font).charW;
+const fitChars = (w, s) => Math.max(6, Math.floor((w - 18) / charWidth(s)));
+
+/** A card's font size and the height of its title band, which grows with a long title. */
+function cardLayout(s) {
+  const size = CANVAS_FONT * fontOf(s.font).scale;
+  const titleLines = wrapText(splitCard(s.text).title, fitChars(s.w, s)).length;
+  return { size, titleH: Math.ceil(titleLines * size * 1.3 + 16) };
 }
 
 function selectionLayer(chosen) {
@@ -429,8 +497,10 @@ function selectionLayer(chosen) {
 
   const s = chosen[0];
   const b = bounds(s);
+  const hs = 9 / z;                              // handles keep their screen size at any zoom
   const handle = (x, y, role) => svgEl('rect', {
-    x: x - 4, y: y - 4, width: 8, height: 8, rx: 2, class: 'handle', 'data-handle': role
+    x: x - hs / 2, y: y - hs / 2, width: hs, height: hs, rx: 2 / z, class: 'handle', 'data-handle': role,
+    'stroke-width': 1.5 / z
   });
 
   if (s.kind === 'arrow') {
@@ -439,6 +509,11 @@ function selectionLayer(chosen) {
     return g;
   }
 
+  /* Every edge is a grab bar: drag anywhere along a side to resize that way. */
+  [['n', b.x, b.y, b.x + b.w, b.y], ['s', b.x, b.y + b.h, b.x + b.w, b.y + b.h],
+   ['w', b.x, b.y, b.x, b.y + b.h], ['e', b.x + b.w, b.y, b.x + b.w, b.y + b.h]].forEach(([role, x1, y1, x2, y2]) => {
+    g.appendChild(svgEl('line', { x1, y1, x2, y2, class: 'edge', 'data-handle': role, 'stroke-width': 10 / z }));
+  });
   CORNERS.forEach(role => {
     const at = cornerPoint(b, role);
     g.appendChild(handle(at.x, at.y, role));
@@ -446,9 +521,9 @@ function selectionLayer(chosen) {
 
   /* Connection ports: drag one out to draw an arrow that stays attached. */
   PORTS.forEach(p => {
-    const at = portPoint(s, p);
+    const at = portPoint(s, p, 18 / z);         // set off the edge, so edge-drag stays clear
     g.appendChild(svgEl('circle', {
-      cx: at.x, cy: at.y, r: 4.5, class: 'port', 'data-port': p, 'data-shape': s.id
+      cx: at.x, cy: at.y, r: 5 / z, class: 'port', 'data-port': p, 'data-shape': s.id, 'stroke-width': 1.6 / z
     }));
   });
   return g;
@@ -465,13 +540,16 @@ function cornerPoint(b, role) {
 }
 
 const PORTS = ['top', 'right', 'bottom', 'left'];
-function portPoint(s, side) {
-  const b = bounds(s);
-  if (side === 'top') return { x: b.x + b.w / 2, y: b.y };
-  if (side === 'bottom') return { x: b.x + b.w / 2, y: b.y + b.h };
-  if (side === 'left') return { x: b.x, y: b.y + b.h / 2 };
-  return { x: b.x + b.w, y: b.y + b.h / 2 };
+function portPoint(s, side, off) {
+  const b = bounds(s), o = off || 0;
+  if (side === 'top') return { x: b.x + b.w / 2, y: b.y - o };
+  if (side === 'bottom') return { x: b.x + b.w / 2, y: b.y + b.h + o };
+  if (side === 'left') return { x: b.x - o, y: b.y + b.h / 2 };
+  return { x: b.x + b.w + o, y: b.y + b.h / 2 };
 }
+
+const PROXIMITY = 24;            // px on screen within which a loose arrow end grabs a shape
+const prox = () => PROXIMITY / scene.view.zoom;
 
 /* ---------- Pointer interaction ---------- */
 
@@ -597,7 +675,7 @@ function onPointerMove(e) {
   }
 
   if (drag.mode === 'connect') {
-    const target = connectTargetAt(scene, point.x, point.y, drag.fromId);
+    const target = connectTargetAt(scene, point.x, point.y, drag.fromId, prox());
     drag.hoverId = target ? target.id : null;
     const from = shapeById(scene, drag.fromId);
     const end = target ? centre(target) : { x: snap(point.x), y: snap(point.y) };
@@ -617,7 +695,7 @@ function onPointerMove(e) {
     }
     drag.preview = makeShape(drag.kind, snap(drag.start.x), snap(drag.start.y), snap(x1), snap(y1), ink, newStyle(drag.kind));
     if (drag.kind === 'arrow') {
-      const target = connectTargetAt(scene, x1, y1, null);
+      const target = connectTargetAt(scene, x1, y1, null, prox());
       drag.hoverId = target ? target.id : null;
     }
     render();
@@ -646,6 +724,7 @@ function onPointerMove(e) {
     if (!step.x && !step.y) return;
     movable().forEach(s => moveShape(scene, s, step.x, step.y));
     syncArrows(scene);
+    drag.hoverId = looseEndCatcher();
     drag.applied = wanted;
     drag.moved = true;
     render();
@@ -659,10 +738,11 @@ function onPointerMove(e) {
       const i = drag.role === 'p1' ? 0 : 2;
       shape.points[i] = snap(point.x);
       shape.points[i + 1] = snap(point.y);
-      const target = connectTargetAt(scene, point.x, point.y, shape.id);
+      const target = connectTargetAt(scene, point.x, point.y, shape.id, prox());
       drag.hoverId = target ? target.id : null;
     } else {
       resizeCorner(shape, drag.role, snap(point.x), snap(point.y), e.shiftKey);
+      syncArrows(scene);
     }
     render();
   }
@@ -690,6 +770,19 @@ function resizeCorner(shape, role, x, y, square) {
     shape.w = size;
     shape.h = size;
   }
+}
+
+/** The moved shape a loose arrow end would attach to on release — highlighted as a hint. */
+function looseEndCatcher() {
+  const moving = selectedShapes().filter(s => s.kind !== 'arrow');
+  const ends = [];
+  scene.shapes.forEach(a => {
+    if (a.kind !== 'arrow' || selectedIds.has(a.id)) return;
+    if (!a.from) ends.push([a.points[0], a.points[1]]);
+    if (!a.to) ends.push([a.points[2], a.points[3]]);
+  });
+  const hit = moving.find(s => ends.some(([x, y]) => hitTest(s, x, y, prox())));
+  return hit ? hit.id : null;
 }
 
 /** Selected shapes to move — a child whose container is also selected is skipped. */
@@ -720,6 +813,7 @@ function onPointerUp() {
     arrow.to = preview.to;
     if (!arrow.to) bindArrow(scene, arrow);
     scene.shapes.push(arrow);
+    attachLooseEnds(scene, prox());
     reparentAll(scene);
     syncArrows(scene);
     selectedIds = new Set([arrow.id]);
@@ -744,6 +838,7 @@ function onPointerUp() {
     pushHistory(finished.before);
     scene.shapes.push(shape);
     if (shape.kind === 'arrow') bindArrow(scene, shape);
+    attachLooseEnds(scene, prox());
     reparentAll(scene);
     syncArrows(scene);
     selectedIds = new Set([shape.id]);
@@ -754,7 +849,7 @@ function onPointerUp() {
     /* Only the text tool implies typing. Shapes get a label on double-click,
        Enter, or the Add text button — drawing three boxes in a row should not
        drop you into a textarea three times. */
-    if (shape.kind === 'text' || shape.kind === 'note') editText(shape);
+    if (shape.kind === 'text' || shape.kind === 'note' || shape.kind === 'card') editText(shape);
     return;
   }
 
@@ -766,6 +861,7 @@ function onPointerUp() {
     const shape = shapeById(scene, finished.id);
     if (shape && shape.kind === 'arrow') bindArrow(scene, shape);
   }
+  attachLooseEnds(scene, prox());
   reparentAll(scene);
   syncArrows(scene);
   render();
@@ -839,9 +935,33 @@ export function editText(shape) {
   if (!shape || !scene) return;
   const wrap = $('#textEdit');
   const area = $('#textEditArea');
-  const b = bounds(shape);
   const z = scene.view.zoom;
   const font = fontOf(shape.font);
+
+  placeEditor(shape);
+  wrap.hidden = false;
+  wrap.dataset.kind = shape.kind;
+  area.style.fontFamily = font.stack;
+  area.style.fontSize = (CANVAS_FONT * font.scale * Math.min(z, 1.6)).toFixed(1) + 'px';
+  area.style.lineHeight = '1.3';
+  area.style.textAlign = isCentred(shape.kind) ? 'center' : 'left';
+  area.value = shape.text || '';
+  centreTextArea(area, isCentred(shape.kind));
+  area.dataset.shapeId = shape.id;
+  textOpenedAt = Date.now();
+
+  requestAnimationFrame(() => {
+    if ($('#textEdit').hidden) return;
+    area.focus();
+    area.select();
+  });
+}
+
+/** Float the editor box over a shape — called again on every keystroke as the shape grows. */
+function placeEditor(shape) {
+  const wrap = $('#textEdit');
+  const b = bounds(shape);
+  const z = scene.view.zoom;
 
   /* An arrow has no interior, so its label is edited over its midpoint. */
   const box = shape.kind === 'arrow'
@@ -851,26 +971,10 @@ export function editText(shape) {
   const top = (box.y - scene.view.y) * z;
   const isLabel = shape.kind === 'container';
 
-  wrap.hidden = false;
-  wrap.dataset.kind = shape.kind;
   wrap.style.left = Math.round(left) + 'px';
   wrap.style.top = Math.round(isLabel ? top + 4 : top) + 'px';
-  wrap.style.width = Math.round(Math.max(130, box.w * z)) + 'px';
+  wrap.style.width = Math.round(Math.max(shape.kind === 'text' ? 40 : 130, box.w * z)) + 'px';
   wrap.style.height = Math.round(Math.max(36, (isLabel ? 36 : box.h) * z)) + 'px';
-  area.style.fontFamily = font.stack;
-  area.style.fontSize = (CANVAS_FONT * font.scale * Math.min(z, 1.6)).toFixed(1) + 'px';
-  area.style.lineHeight = '1.3';
-  area.style.textAlign = isCentred(shape.kind) ? 'center' : 'left';
-  centreTextArea(area, isCentred(shape.kind));
-  area.value = shape.text || '';
-  area.dataset.shapeId = shape.id;
-  textOpenedAt = Date.now();
-
-  requestAnimationFrame(() => {
-    if ($('#textEdit').hidden) return;
-    area.focus();
-    area.select();
-  });
 }
 
 /**
@@ -902,7 +1006,12 @@ export function onTextInput() {
   const area = $('#textEditArea');
   if (!wrap || wrap.hidden || !area || !scene) return;
   const shape = shapeById(scene, area.dataset.shapeId);
-  centreTextArea(area, !!shape && isCentred(shape.kind));
+  if (!shape) return;
+  /* Grow the box as you type: size a stand-in, so nothing is committed yet. */
+  const draft = { ...shape, text: area.value };
+  fitText(draft);
+  placeEditor(draft);
+  centreTextArea(area, isCentred(shape.kind));
 }
 
 export function commitText() {
@@ -925,18 +1034,30 @@ export function commitText() {
   if (shape.text === value) return;
   commit(() => {
     shape.text = value;
-    growToFit(shape);
+    fitText(shape);
+    syncArrows(scene);
   });
 }
 
-/** Give a shape the height its text needs, never taking any away. */
-function growToFit(shape) {
+/**
+ * Size a shape to its text. A text label hugs it both ways, like a typed line;
+ * every other shape only grows taller, never giving back room you drew.
+ */
+function fitText(shape) {
   if (shape.kind === 'arrow' || !shape.text) return;
-  const font = fontOf(shape.font);
-  const size = CANVAS_FONT * font.scale;
-  const maxChars = Math.max(6, Math.floor((shape.w - 18) / (size * 0.52)));
-  const lines = wrapText(shape.text, maxChars);
-  const needed = textHeight(shape, size, lines.length);
+  const size = CANVAS_FONT * fontOf(shape.font).scale;
+  if (shape.kind === 'text') {
+    const raw = shape.text.split('\n');
+    const longest = Math.max(...raw.map(l => l.length));
+    shape.w = Math.max(40, Math.ceil((longest + 1) * charWidth(shape) + 18));
+    shape.h = Math.ceil(raw.length * size * 1.3 + 8);
+    return;
+  }
+  const chars = fitChars(shape.w, shape);
+  const lines = shape.kind === 'card'
+    ? wrapText(splitCard(shape.text).title, chars).length + wrapText(splitCard(shape.text).body, chars).length
+    : wrapText(shape.text, chars).length;
+  const needed = textHeight(shape, size, lines);
   if (needed > shape.h) shape.h = needed;
 }
 
@@ -1094,6 +1215,7 @@ export function toSVG() {
   style.textContent = '.label{font-family:Inter,-apple-system,"Segoe UI",Helvetica,sans-serif}' +
     '.hit{stroke:none;fill:none}';
   svg.appendChild(style);
+  svg.appendChild(sketchDefs());
   const saved = drag;
   drag = null;                                  // never export a drag preview
   drawOrder(scene).forEach(s => svg.appendChild(shapeNode(s)));

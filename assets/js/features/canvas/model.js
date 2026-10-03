@@ -17,12 +17,12 @@ import {
 } from '../../core/config.js';
 import { uid } from '../../core/dom.js';
 
-export const KINDS = ['rect', 'ellipse', 'arrow', 'text', 'note', 'container'];
-export const BOXY = ['rect', 'ellipse', 'container', 'text', 'note'];
+export const KINDS = ['rect', 'ellipse', 'arrow', 'text', 'note', 'container', 'card'];
+export const BOXY = ['rect', 'ellipse', 'container', 'text', 'note', 'card'];
 
 /** Tool shortcuts. */
 export const SHORTCUTS = {
-  v: 'select', r: 'rect', c: 'ellipse', a: 'arrow', t: 'text', n: 'note', f: 'container'
+  v: 'select', r: 'rect', c: 'ellipse', a: 'arrow', t: 'text', n: 'note', f: 'container', b: 'card'
 };
 
 /** Kinds whose text sits in the middle of the shape. */
@@ -58,7 +58,7 @@ export function makeShape(kind, x0, y0, x1, y1, ink, style) {
   const base = {
     id: uid(), kind, ink, text: '', parent: null,
     fill: (style && style.fill) || DEFAULT_FILLS[kind] || 'none',
-    font: (style && style.font) || 'sans'
+    font: (style && style.font) || 'hand'
   };
   if (kind === 'arrow') return { ...base, points: [x0, y0, x1, y1], from: null, to: null };
   return {
@@ -71,8 +71,8 @@ export function makeShape(kind, x0, y0, x1, y1, ink, style) {
 /** A click rather than a drag still deserves a shape, at a sensible size. */
 export function defaultSized(kind, x, y, ink, style) {
   if (kind === 'arrow') return makeShape('arrow', x, y, x + DEFAULT_SHAPE_W, y, ink, style);
-  const w = kind === 'text' ? 160 : (kind === 'note' ? 200 : (kind === 'container' ? DEFAULT_SHAPE_W * 2 : DEFAULT_SHAPE_W));
-  const h = kind === 'text' ? 30 : (kind === 'note' ? 90 : (kind === 'container' ? DEFAULT_SHAPE_H * 2 : DEFAULT_SHAPE_H));
+  const sizes = { text: [160, 30], note: [200, 90], container: [DEFAULT_SHAPE_W * 2, DEFAULT_SHAPE_H * 2], card: [220, 130] };
+  const [w, h] = sizes[kind] || [DEFAULT_SHAPE_W, DEFAULT_SHAPE_H];
   return makeShape(kind, x - w / 2, y - h / 2, x + w / 2, y + h / 2, ink, style);
 }
 
@@ -183,9 +183,9 @@ function translate(s, dx, dy) {
  * over a container, so dropping an end inside a container still connects to
  * the box you aimed at.
  */
-export function connectTargetAt(scene, x, y, exceptId) {
+export function connectTargetAt(scene, x, y, exceptId, slack) {
   const candidates = scene.shapes.filter(s =>
-    s.id !== exceptId && s.kind !== 'arrow' && hitTest(s, x, y, 6));
+    s.id !== exceptId && s.kind !== 'arrow' && hitTest(s, x, y, slack || 6));
   return candidates.find(s => s.kind !== 'container') || candidates[0] || null;
 }
 
@@ -196,6 +196,25 @@ export function bindArrow(scene, arrow) {
   const to = connectTargetAt(scene, x2, y2, arrow.id);
   arrow.from = from ? from.id : null;
   arrow.to = (to && (!from || to.id !== from.id)) ? to.id : null;
+}
+
+/**
+ * Give every loose arrow end a home when a shape now sits within `slack` of it.
+ * Only empty ends are filled — a bound end is never stolen. A container only
+ * catches an end near its edge, so free arrows drawn inside one stay free.
+ */
+export function attachLooseEnds(scene, slack) {
+  scene.shapes.forEach(a => {
+    if (a.kind !== 'arrow') return;
+    const near = (x, y, other) => {
+      const t = connectTargetAt(scene, x, y, a.id, slack);
+      if (!t || t.id === other) return null;
+      if (t.kind === 'container' && hitTest(t, x, y, -slack)) return null;
+      return t.id;
+    };
+    if (!a.from) a.from = near(a.points[0], a.points[1], a.to);
+    if (!a.to) a.to = near(a.points[2], a.points[3], a.from);
+  });
 }
 
 /**
@@ -328,11 +347,17 @@ export function boundsOfAll(shapes) {
 
 /** How tall a shape must be for its text to fit. */
 export function textHeight(shape, fontSize, lineCount) {
-  const pad = shape.kind === 'container' ? 30 : 22;
+  const pad = shape.kind === 'card' ? 52 : (shape.kind === 'container' ? 30 : 22);
   return Math.ceil(lineCount * fontSize * 1.3 + pad);
 }
 
 /* ---------- Text ---------- */
+
+/** A card's first line is its title; the rest is its body. */
+export function splitCard(text) {
+  const [title, ...rest] = String(text || '').split('\n');
+  return { title, body: rest.join('\n') };
+}
 
 /** Greedy wrap, honouring explicit newlines. */
 export function wrapText(text, maxChars) {

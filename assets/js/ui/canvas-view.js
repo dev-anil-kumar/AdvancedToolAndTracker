@@ -4,9 +4,10 @@
  * owns everything around it.
  */
 import { on, EVENTS } from '../core/bus.js';
-import { FILLS, FONTS, INKS } from '../core/config.js';
+import { CANVAS_THEMES, FILLS, FONTS, INKS } from '../core/config.js';
 import { $, $$, el } from '../core/dom.js';
 import { formatWhen, plural } from '../core/format.js';
+import { isZen, setZen } from '../features/focus.js';
 import { drawingById, drawings, drawingsByRecency } from '../core/state.js';
 import { route } from '../core/router.js';
 import { toast } from '../core/toast.js';
@@ -15,7 +16,7 @@ import {
   createDrawing, importDrawing, removeDrawing, renameDrawing, toScene
 } from '../features/drawings.js';
 import {
-  activeFill, activeFont, attachEditor, activeScene, activeTool, canRedo, canUndo,
+  activeFill, activeFont, activeTheme, attachEditor, setTheme, activeScene, activeTool, canRedo, canUndo,
   clearSelection, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
   pasteClipboard, reorderSelection, setFill, setFont, setToolLocked,
   deleteSelection, detachSelection, duplicateSelection, editSelectionText, fitView,
@@ -32,7 +33,8 @@ const TOOLS = [
   { tool: 'arrow', key: 'A', label: 'Arrow', hint: 'Arrow — drop an end on a shape to connect it' },
   { tool: 'text', key: 'T', label: 'Text', hint: 'A single text label' },
   { tool: 'note', key: 'N', label: 'Text box', hint: 'Text box — a text container with no visible boundary' },
-  { tool: 'container', key: 'F', label: 'Container', hint: 'Container — moving it moves everything inside' }
+  { tool: 'container', key: 'F', label: 'Container', hint: 'Container — moving it moves everything inside' },
+  { tool: 'card', key: 'B', label: 'Card', hint: 'Card — a box with a title and a body; the first line is the title' }
 ];
 
 const ICONS = {
@@ -42,7 +44,8 @@ const ICONS = {
   arrow: '<path d="M4 18L20 6M20 6h-6M20 6v6"/>',
   text: '<path d="M5 6h14M12 6v13"/>',
   note: '<rect x="3.5" y="6" width="17" height="12" rx="2" stroke-dasharray="2.5 2.5"/><path d="M8 10.5h8M8 14h5"/>',
-  container: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke-dasharray="3 2.5"/><path d="M7 10h4"/>'
+  container: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke-dasharray="3 2.5"/><path d="M7 10h4"/>',
+  card: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M7 13.5h8M7 16.5h5"/>'
 };
 
 let ready = false;
@@ -73,6 +76,7 @@ function initCanvas() {
   renderInks();
   renderFills();
   renderFonts();
+  renderThemes();
   attachEditor({ onChange: syncToolbar });
 }
 
@@ -146,6 +150,13 @@ function renderFonts() {
   });
 }
 
+function renderThemes() {
+  const pick = $('#cTheme');
+  pick.innerHTML = '';
+  CANVAS_THEMES.forEach(t => { pick.appendChild(el('option', null, t.label)).value = t.key; });
+  pick.addEventListener('change', () => setTheme(pick.value));
+}
+
 /** Reflect editor state: active tool, ink, undo availability, shape count. */
 export function syncToolbar() {
   const scene = activeScene();
@@ -174,6 +185,10 @@ export function syncToolbar() {
   $('#cFront').disabled = !chosen.length;
   $('#cBack').disabled = !chosen.length;
   $('#cLock').setAttribute('aria-pressed', String(isToolLocked()));
+  $('#cTheme').value = activeTheme();
+  $('#cMax').setAttribute('aria-pressed', String(isZen()));
+  /* Focus mode shows the style pickers only when there is something to style. */
+  $('#view-canvas .ctoolbar').dataset.styling = String(chosen.length > 0 || activeTool() !== 'select');
   $('#cName').value = scene ? scene.name : '';
   $('#cZoom').textContent = scene ? Math.round(scene.view.zoom * 100) + '%' : '';
   $('#cCount').textContent = scene
@@ -189,7 +204,7 @@ export function syncToolbar() {
 const SHORTCUT_GROUPS = [
   ['Tools', [
     ['R', 'Rectangle'], ['C', 'Circle'], ['A', 'Arrow'],
-    ['T', 'Text label'], ['N', 'Text box'], ['F', 'Container'], ['V', 'Select']
+    ['T', 'Text label'], ['N', 'Text box'], ['F', 'Container'], ['B', 'Card (title + body)'], ['V', 'Select']
   ]],
   ['Editing', [
     ['Double-click', 'Write inside a shape — or on empty canvas for a new text box'],
@@ -200,13 +215,13 @@ const SHORTCUT_GROUPS = [
   ]],
   ['Arranging', [
     ['Drag a side dot', 'Pull out an arrow that stays attached'],
-    ['Drag a corner', 'Resize'], ['Shift-drag', 'Keep to one axis, or keep it square'],
+    ['Drag a corner or edge', 'Resize'], ['Drop near a loose arrow end', 'It attaches'], ['Shift-drag', 'Keep to one axis, or keep it square'],
     ['Arrows', 'Nudge — hold shift for bigger steps'],
     ['⌘] / ⌘[', 'Bring to front, send to back']
   ]],
   ['Canvas', [
     ['Drag empty space', 'Select several'], ['Shift-click', 'Add to the selection'],
-    ['Space-drag', 'Pan'], ['⌘-wheel', 'Zoom'], ['⌘A', 'Select all'], ['?', 'This list']
+    ['Space-drag', 'Pan'], ['⌘-wheel', 'Zoom'], ['⌘A', 'Select all'], ['M', 'Focus mode'], ['?', 'This list']
   ]]
 ];
 
@@ -305,6 +320,7 @@ $('#cFront').addEventListener('click', () => reorderSelection(true));
 $('#cBack').addEventListener('click', () => reorderSelection(false));
 $('#cLock').addEventListener('click', () => setToolLocked(!isToolLocked()));
 $('#cHelp').addEventListener('click', () => openShortcuts());
+$('#cMax').addEventListener('click', () => { setZen(!isZen()); syncToolbar(); });
 $$('#shortcutsDlg [data-close]').forEach(b => b.addEventListener('click', () => $('#shortcutsDlg').close()));
 $('#cDetach').addEventListener('click', detachSelection);
 $('#cFit').addEventListener('click', fitView);
@@ -359,6 +375,7 @@ document.addEventListener('keydown', e => {
   if (mod) return;
 
   if (e.key === '?') { e.preventDefault(); openShortcuts(); return; }
+  if (e.key === 'm' || e.key === 'M') { e.preventDefault(); setZen(!isZen()); syncToolbar(); return; }
 
   const key = e.key.toLowerCase();
   if (SHORTCUTS[key]) { e.preventDefault(); setTool(SHORTCUTS[key]); return; }
