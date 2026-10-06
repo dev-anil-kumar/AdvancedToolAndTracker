@@ -2999,6 +2999,21 @@ ok('the "New document" quick action creates and opens a fresh one',
   writeState.writedocs.length === homeNewCountBefore + 1 && shownViews() === 'view-write');
 ok('and it starts empty', (q('#writeSheet').textContent || '').trim() === '');
 
+section('home: clearing saved data');
+const { dbAll } = await import('../assets/js/core/db.js');
+click(q('#tab-home'));
+await wait(40);
+ok('saved data section has a button per section plus clear all', qa('#clearBtns [data-clear]').length === 8);
+const drawingsBefore = (await dbAll('drawings')).length;
+click(q('#clearBtns [data-clear="drawings"]'));
+await wait(80);
+ok('clearing Canvas empties only the drawings store',
+  drawingsBefore > 0 && (await dbAll('drawings')).length === 0 && (await dbAll('writedocs')).length > 0, drawingsBefore);
+click(q('#clearBtns [data-clear="all"]'));
+await wait(120);
+const left = await Promise.all(['files', 'notes', 'writedocs', 'prefs'].map(dbAll));
+ok('clear all empties every store', left.every(rows => rows.length === 0));
+
 console.log('\n' + (failures ? 'FAILED' : 'PASSED') + ': ' + (checks - failures) + '/' + checks + ' checks');
 if (consoleErrors.length) {
   console.log('console errors:\n  ' + consoleErrors.join('\n  '));

@@ -6,7 +6,8 @@
  * It never mutates state itself — that is what the feature modules are for.
  */
 import { on, EVENTS } from '../core/bus.js';
-import { PER_ROW_MAX, PER_ROW_MIN, RECENT_VISIBLE, HIGHLIGHTS } from '../core/config.js';
+import { PER_ROW_MAX, PER_ROW_MIN, RECENT_VISIBLE, HIGHLIGHTS, STORES } from '../core/config.js';
+import { dbClear } from '../core/db.js';
 import { $, el } from '../core/dom.js';
 import { formatBytes, formatWhen, kindLabel, plural } from '../core/format.js';
 import {
@@ -219,6 +220,20 @@ $('#expDocs').addEventListener('click', () => saveManyFiles(docItems(), 'folio-d
 $('#expPasted').addEventListener('click', () => saveManyFiles(pasteItems(), 'folio-pasted'));
 $('#expNotes').addEventListener('click', () => saveOneFile('folio-notes.md', allNotesMarkdown()));
 $('#expAll').addEventListener('click', () => saveManyFiles(everythingItems(), 'folio-everything'));
+
+/* ---------- Clearing saved data ---------- */
+
+/* Reload afterwards: every feature keeps its own in-memory copy, and a fresh
+   start is the one reset that reaches all of them. */
+$('#clearBtns').addEventListener('click', async e => {
+  const b = e.target.closest('[data-clear]');
+  if (!b) return;
+  const all = b.dataset.clear === 'all';
+  const what = all ? 'ALL saved data (documents, notes, drawings, settings…)' : 'all saved ' + b.textContent;
+  if (!confirm('Delete ' + what + ' from this browser? This cannot be undone.')) return;
+  for (const store of all ? STORES : b.dataset.clear.split(',')) await dbClear(store);
+  location.reload();
+});
 
 /* Re-render whenever anything Home displays has changed. */
 [EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.PREFS, EVENTS.WRITEDOCS].forEach(evt => on(evt, renderHome));

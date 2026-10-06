@@ -58,6 +58,16 @@ export async function dbDel(store, id) {
     t.onerror = () => rej(t.error);
   });
 }
+export async function dbClear(store) {
+  const db = await openDB();
+  if (!db) { mem[store].clear(); return; }
+  return new Promise((res, rej) => {
+    const t = db.transaction(store, 'readwrite');
+    t.objectStore(store).clear();
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
 /* Persistence is a convenience, never a blocker: a failed write warns once. */
 export async function persist(promise) {
   try { return await promise; }
