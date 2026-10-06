@@ -7,7 +7,8 @@
  */
 import { on, EVENTS } from '../core/bus.js';
 import { PER_ROW_MAX, PER_ROW_MIN, RECENT_VISIBLE, HIGHLIGHTS, STORES } from '../core/config.js';
-import { dbClear } from '../core/db.js';
+import { dbAll, dbClear, dbDel } from '../core/db.js';
+import { refsIn } from '../features/note-images.js';
 import { $, el } from '../core/dom.js';
 import { formatBytes, formatWhen, kindLabel, plural } from '../core/format.js';
 import {
@@ -232,8 +233,19 @@ $('#clearBtns').addEventListener('click', async e => {
   const what = all ? 'ALL saved data (documents, notes, drawings, settings…)' : 'all saved ' + b.textContent;
   if (!confirm('Delete ' + what + ' from this browser? This cannot be undone.')) return;
   for (const store of all ? STORES : b.dataset.clear.split(',')) await dbClear(store);
+  await sweepOrphans();
   location.reload();
 });
+
+/** Drop what pointed at cleared data: a document's highlights, and images no note uses. */
+async function sweepOrphans() {
+  const fileIds = new Set((await dbAll('files')).map(f => f.id));
+  const notes = await dbAll('notes');
+  const kept = notes.filter(n => !n.fileId || fileIds.has(n.fileId));
+  for (const n of notes) if (!kept.includes(n)) await dbDel('notes', n.id);
+  const used = new Set(kept.flatMap(n => refsIn(n.body)));
+  for (const im of await dbAll('images')) if (!used.has(im.id)) await dbDel('images', im.id);
+}
 
 /* Re-render whenever anything Home displays has changed. */
 [EVENTS.LIBRARY, EVENTS.NOTES, EVENTS.PANES, EVENTS.PREFS, EVENTS.WRITEDOCS].forEach(evt => on(evt, renderHome));

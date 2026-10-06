@@ -5,7 +5,7 @@
   "description": "A local-first Markdown reader. Static, no build step, deployable to GitHub Pages.",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8000",
+    "start": "python3 -c \"import http.server as s; H=s.SimpleHTTPRequestHandler; e=H.end_headers; H.end_headers=lambda self: (self.send_header('Cache-Control', 'no-store'), e(self)); s.test(HandlerClass=H, port=8000)\"",
     "test": "node tests/smoke.mjs",
     "lint": "eslint .",
     "check": "npm run lint && npm test"
