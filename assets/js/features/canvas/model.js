@@ -4,7 +4,7 @@
  * A scene is `{ id, name, shapes: [...], view: {x, y, zoom} }` and a shape is
  * one of five kinds:
  *
- *   rect · ellipse · container   x, y, w, h, text, ink, parent
+ *   rect · ellipse · diamond · container   x, y, w, h, text, ink, parent
  *   arrow                        points [x1,y1,x2,y2], from, to, ink
  *   text                         x, y, w, h, text, ink, parent
  *
@@ -17,16 +17,16 @@ import {
 } from '../../core/config.js';
 import { uid } from '../../core/dom.js';
 
-export const KINDS = ['rect', 'ellipse', 'arrow', 'text', 'note', 'container', 'card'];
-export const BOXY = ['rect', 'ellipse', 'container', 'text', 'note', 'card'];
+export const KINDS = ['rect', 'ellipse', 'diamond', 'arrow', 'text', 'note', 'container', 'card'];
+export const BOXY = ['rect', 'ellipse', 'diamond', 'container', 'text', 'note', 'card'];
 
 /** Tool shortcuts. */
 export const SHORTCUTS = {
-  v: 'select', r: 'rect', c: 'ellipse', a: 'arrow', t: 'text', n: 'note', f: 'container', b: 'card'
+  v: 'select', r: 'rect', c: 'ellipse', d: 'diamond', a: 'arrow', t: 'text', n: 'note', f: 'container', b: 'card'
 };
 
 /** Kinds whose text sits in the middle of the shape. */
-export const CENTRED = ['rect', 'ellipse', 'note', 'arrow'];
+export const CENTRED = ['rect', 'ellipse', 'diamond', 'note', 'arrow'];
 export const isCentred = (kind) => CENTRED.includes(kind);
 
 /** Resolve a background key to a paintable colour. */
@@ -100,6 +100,10 @@ export function hitTest(s, px, py, slack) {
     if (!rx || !ry) return false;
     const dx = (px - c.x) / rx, dy = (py - c.y) / ry;
     return dx * dx + dy * dy <= 1;
+  }
+  if (s.kind === 'diamond') {
+    const c = centre(s), hw = s.w / 2 + pad, hh = s.h / 2 + pad;
+    return !!hw && !!hh && Math.abs(px - c.x) / hw + Math.abs(py - c.y) / hh <= 1;
   }
   return px >= s.x - pad && px <= s.x + s.w + pad && py >= s.y - pad && py <= s.y + s.h + pad;
 }
@@ -254,6 +258,10 @@ export function borderPoint(s, towards) {
   if (s.kind === 'ellipse') {
     const rx = (s.w / 2) || 1, ry = (s.h / 2) || 1;
     const k = 1 / Math.hypot(dx / rx, dy / ry);
+    return { x: c.x + dx * k, y: c.y + dy * k };
+  }
+  if (s.kind === 'diamond') {
+    const k = 1 / (Math.abs(dx) / ((s.w / 2) || 1) + Math.abs(dy) / ((s.h / 2) || 1));
     return { x: c.x + dx * k, y: c.y + dy * k };
   }
   const hw = (s.w || 1) / 2, hh = (s.h || 1) / 2;

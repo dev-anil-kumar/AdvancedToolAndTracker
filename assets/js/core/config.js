@@ -89,6 +89,7 @@ export const FILLS = ['none', 'graphite', 'harbor', 'amber', 'moss', 'rose'];
 export const DEFAULT_FILLS = {
   rect: 'harbor',
   ellipse: 'amber',
+  diamond: 'moss',
   container: 'graphite',
   card: 'none',
   note: 'none',

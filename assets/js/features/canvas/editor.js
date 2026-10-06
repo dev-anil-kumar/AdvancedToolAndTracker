@@ -1,7 +1,7 @@
 /**
  * The canvas editor: renders a scene as SVG and handles every interaction.
  *
- *   r / c / a / t / f      pick a tool, then drag to draw (shift constrains)
+ *   r / c / d / a / t / f  pick a tool, then drag to draw (shift constrains)
  *   drag a shape           move it; a container brings its contents along
  *   shift-click            add to the selection; drag empty space to marquee
  *   drag a side port        pull a connected arrow out of a shape
@@ -375,6 +375,12 @@ function shapeNode(s, preview) {
     g.appendChild(svgEl('ellipse', {
       cx: s.x + s.w / 2, cy: s.y + s.h / 2, rx: Math.max(1, s.w / 2), ry: Math.max(1, s.h / 2),
       fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
+    }));
+  } else if (s.kind === 'diamond') {
+    const cx = s.x + s.w / 2, cy = s.y + s.h / 2;
+    g.appendChild(svgEl('polygon', {
+      points: [cx, s.y, s.x + s.w, cy, cx, s.y + s.h, s.x, cy].join(' '),
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, 'stroke-linejoin': 'round', filter: 'url(#sketch)'
     }));
   } else if (s.kind === 'container') {
     g.appendChild(svgEl('rect', {

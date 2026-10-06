@@ -138,7 +138,8 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
 #scene .port:hover { fill: var(--accent); }
 #scene .marquee { fill: var(--accent-soft); stroke: var(--accent); stroke-dasharray: 4 3; }
 #scene .shape.hover-target > rect,
-#scene .shape.hover-target > ellipse {
+#scene .shape.hover-target > ellipse,
+#scene .shape.hover-target > polygon {
   stroke-width: 3.5; filter: drop-shadow(0 0 3px var(--accent));
 }
 #scene .bound { opacity: .9; }
