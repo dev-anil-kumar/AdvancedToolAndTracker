@@ -699,7 +699,7 @@ section('canvas: creating a drawing');
 click(q('#canvasNew'));
 await wait(200);
 ok('canvas view is showing', shownViews() === 'view-canvas', shownViews());
-ok('tool strip built', qa('#cTools .ctool').length === 8, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
+ok('tool strip built', qa('#cTools .ctool').length === 9, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
 ok('rectangle is the default tool', editor0.activeTool() === 'rect', editor0.activeTool());
 ok('background swatches built', qa('#cFills .swatch').length === 6);
 ok('font choices built', qa('#cFonts button').length === 3, qa('#cFonts button').map(b => b.dataset.font).join(','));
