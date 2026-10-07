@@ -17,7 +17,7 @@ import {
 } from '../features/drawings.js';
 import {
   activeFill, activeFont, activeTheme, attachEditor, setTheme, activeScene, activeTool, canRedo, canUndo,
-  clearSelection, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
+  changeTextSize, clearSelection, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
   pasteClipboard, reorderSelection, setFill, setFont, setToolLocked,
   deleteSelection, detachSelection, duplicateSelection, editSelectionText, fitView,
   flushSave, hideTextEditor, isEditingText, loadScene, nudgeSelection, onTextBlur, redo,
@@ -68,7 +68,7 @@ export async function newDrawing() {
   loadScene(scene);
   route('canvas');
   requestAnimationFrame(render);
-  setTool('rect');
+  /* Keep whatever tool was last used — text box by default on a first visit. */
 }
 
 function initCanvas() {
@@ -314,6 +314,8 @@ $('#cName').addEventListener('change', () => {
   renameDrawing(scene.id, scene.name);
   syncToolbar();
 });
+$('#cTextBigger').addEventListener('click', () => changeTextSize(1.15));
+$('#cTextSmaller').addEventListener('click', () => changeTextSize(1 / 1.15));
 $('#cUndo').addEventListener('click', undo);
 $('#cRedo').addEventListener('click', redo);
 $('#cDelete').addEventListener('click', deleteSelection);

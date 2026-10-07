@@ -4,6 +4,16 @@
    so an exported SVG stands on its own.
    --------------------------------------------------------------- */
 
+/* Excalidraw's hand-drawn typeface (Virgil / Excalifont). Falls back to
+   Caveat, already loaded from Google Fonts, when this can't be fetched. */
+@font-face {
+  font-family: 'Excalifont';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.17.6/dist/excalidraw-assets/Virgil.woff2') format('woff2');
+}
+
 #view-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ---------- Tool strip ---------- */
@@ -92,10 +102,16 @@
   width: 100%; height: 100%; resize: none;
   font: inherit; font-size: 14px; line-height: 1.35; text-align: center;
   padding: 4px 6px; border-radius: 6px; color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  box-shadow: var(--pop);
+  /* Transparent, so the canvas and any fill show through while you type —
+     the boundary is a dashed accent outline, shown only while editing. */
+  background: transparent;
+  border: 1px dashed var(--accent);
+  box-shadow: none;
+  white-space: pre-wrap;
 }
+/* On a dark canvas the drawing is colour-inverted, so the editor (plain HTML,
+   never inverted) needs a light ink of its own to stay legible. */
+.canvas-host[data-theme="dark"] .text-edit textarea { color: #e9e7e1; caret-color: #e9e7e1; }
 
 /* ---------- Empty state ---------- */
 .canvas-empty {
@@ -121,7 +137,7 @@ body.zen .ctoolbar {
 }
 body.zen .ctoolbar > :is(.csep, .spacer, #cName, .cmeta, #cLabel, #cDetach, #cFront, #cBack,
   #cZoomOut, #cZoomIn, #cFit, #cNew, #cImport, #cExportJson, #cExportSvg, #cExportPng, #cTheme, #cHelp) { display: none; }
-body.zen .ctoolbar[data-styling="false"] :is(#cInks, #cFills, #cFonts) { display: none; }
+body.zen .ctoolbar[data-styling="false"] :is(#cInks, #cFills, #cFonts, .ctextsize) { display: none; }
 body.zen[data-view="canvas"] .zen-exit { display: none; }
 
 @media (max-width: 820px) {
@@ -172,6 +188,21 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
 }
 .cfonts button:hover { color: var(--ink); background: var(--surface); }
 .cfonts button[aria-pressed="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: var(--shadow); }
+
+/* Text-size steppers: a small A and a large A. */
+.ctextsize {
+  display: flex; align-items: center; gap: 2px; padding: 2px;
+  background: var(--bg-tint); border: 1px solid var(--line); border-radius: 8px;
+}
+.ctextsize button {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  min-width: 26px; height: 24px; border-radius: 5px; color: var(--ink-2);
+  line-height: 1; padding: 0 5px; font-weight: 600;
+}
+.ctextsize button:first-child { font-size: 11px; }
+.ctextsize button:last-child { font-size: 17px; }
+.ctextsize button:hover { color: var(--ink); background: var(--surface); }
+.ctextsize button:active { color: var(--accent-ink); }
 
 #scene .note-edge { pointer-events: all; }
 #scene .handle[data-handle="nw"], #scene .handle[data-handle="se"] { cursor: nwse-resize; }

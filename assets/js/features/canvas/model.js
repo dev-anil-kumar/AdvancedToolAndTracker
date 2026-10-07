@@ -58,7 +58,8 @@ export function makeShape(kind, x0, y0, x1, y1, ink, style) {
   const base = {
     id: uid(), kind, ink, text: '', parent: null,
     fill: (style && style.fill) || DEFAULT_FILLS[kind] || 'none',
-    font: (style && style.font) || 'hand'
+    font: (style && style.font) || 'hand',
+    fontScale: (style && style.fontScale) || 1
   };
   if (kind === 'arrow') return { ...base, points: [x0, y0, x1, y1], from: null, to: null };
   return {
@@ -414,6 +415,7 @@ export function parseScene(json, fallbackName) {
     parent: s.parent || null,
     fill: s.fill || DEFAULT_FILLS[s.kind] || 'none',
     font: fontOf(s.font).key,
+    fontScale: Number(s.fontScale) > 0 ? Number(s.fontScale) : 1,
     ...(s.kind === 'arrow'
       ? { points: (s.points || [0, 0, 60, 0]).map(Number), from: s.from || null, to: s.to || null }
       : { x: Number(s.x) || 0, y: Number(s.y) || 0, w: Number(s.w) || 60, h: Number(s.h) || 40 })

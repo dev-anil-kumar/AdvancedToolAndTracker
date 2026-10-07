@@ -651,13 +651,22 @@ const pointer = (type, x, y, target) => {
   ev.pointerId = 1;
   (target || q('#canvasHost')).dispatchEvent(ev);
 };
-const drawShape = async (toolKey, x0, y0, x1, y1) => {
+/* Draw a shape, then return to the Select tool. The tool now stays chosen after
+   a drawing (the "last-used tool" behaviour), so the generic interaction tests
+   below — which expect to select and move next — ask for select explicitly. The
+   lock test uses drawShapeKeep to observe the un-reset tool. */
+const drawShapeKeep = async (toolKey, x0, y0, x1, y1) => {
   d.dispatchEvent(new window.KeyboardEvent('keydown', { key: toolKey, bubbles: true }));
   pointer('pointerdown', x0, y0);
   pointer('pointermove', (x0 + x1) / 2, (y0 + y1) / 2, window);
   pointer('pointermove', x1, y1, window);
   pointer('pointerup', x1, y1, window);
   await wait(30);
+};
+const drawShape = async (toolKey, x0, y0, x1, y1) => {
+  await drawShapeKeep(toolKey, x0, y0, x1, y1);
+  d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+  await wait(10);
 };
 const shapes = () => canvasScene().shapes;
 const hideEditor = () => { q('#textEdit').hidden = true; };
@@ -700,7 +709,7 @@ click(q('#canvasNew'));
 await wait(200);
 ok('canvas view is showing', shownViews() === 'view-canvas', shownViews());
 ok('tool strip built', qa('#cTools .ctool').length === 9, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
-ok('rectangle is the default tool', editor0.activeTool() === 'rect', editor0.activeTool());
+ok('text box is the default tool', editor0.activeTool() === 'note', editor0.activeTool());
 ok('background swatches built', qa('#cFills .swatch').length === 6);
 ok('font choices built', qa('#cFonts button').length === 3, qa('#cFonts button').map(b => b.dataset.font).join(','));
 ok('ink swatches built', qa('#cInks .swatch').length === 5);
@@ -716,7 +725,7 @@ section('canvas: r, c and a draw shapes');
 await drawShape('r', 200, 200, 340, 300);
 ok('R drew a rectangle', shapes().length === 1 && shapes()[0].kind === 'rect', shapes()[0] && shapes()[0].kind);
 ok('snapped and sized', shapes()[0].w === 140 && shapes()[0].h === 100, shapes()[0].w + '×' + shapes()[0].h);
-ok('tool returns to select', editor.activeTool() === 'select');
+ok('the canvas is in select for the next action', editor.activeTool() === 'select');
 await drawShape('c', 600, 200, 740, 300);
 ok('C drew a circle', shapes()[1].kind === 'ellipse');
 await drawShape('a', 330, 250, 610, 250);
@@ -862,9 +871,10 @@ section('canvas: backgrounds and fonts');
 /* undo/redo rebuilds the scene from JSON, so never hold a shape reference
    across one — read it back out of the scene each time. */
 const box = () => shapes()[0];
-ok('a new rectangle gets a background', box().fill === 'harbor', String(box().fill));
-ok('a new circle gets its own', shapes()[1].fill === 'amber', String(shapes()[1].fill));
-ok('the background is painted', !!d.querySelector('#scene .shape[data-kind="rect"] rect').getAttribute('fill').startsWith,
+ok('a new rectangle is transparent by default', box().fill === 'none', String(box().fill));
+ok('a new circle is transparent too', shapes()[1].fill === 'none', String(shapes()[1].fill));
+ok('a transparent shape paints no fill',
+  d.querySelector('#scene .shape[data-kind="rect"] rect').getAttribute('fill') === 'none',
   d.querySelector('#scene .shape[data-kind="rect"] rect').getAttribute('fill'));
 await clickShape(box());
 ok('the rectangle is selected', editor.selection() === box(), editor.selection() ? editor.selection().kind : 'none');
@@ -1090,18 +1100,23 @@ section('canvas: loose arrow ends attach, cards split title from body');
   ok('card title is the first line', c.title === 'Plan' && c.body === 'step one\nstep two');
 }
 
-section('canvas: the tool can be locked');
-ok('lock starts off', q('#cLock').getAttribute('aria-pressed') === 'false');
-click(q('#cLock'));
-await wait(20);
-ok('lock turns on', editor.isToolLocked() && q('#cLock').getAttribute('aria-pressed') === 'true');
-await drawShape('r', 980, 620, 1080, 680);
+section('canvas: the last-used tool stays, and the lock can be turned off');
+ok('lock is on by default', editor.isToolLocked() && q('#cLock').getAttribute('aria-pressed') === 'true');
+await drawShapeKeep('r', 980, 620, 1080, 680);     // no reset: observe the real post-draw tool
 ok('the tool survives a drawing', editor.activeTool() === 'rect', editor.activeTool());
 click(q('#cLock'));
-await drawShape('r', 980, 700, 1080, 760);
+await wait(20);
+ok('lock turns off', !editor.isToolLocked() && q('#cLock').getAttribute('aria-pressed') === 'false');
+await drawShapeKeep('r', 980, 700, 1080, 760);
 ok('unlocked, it goes back to select', editor.activeTool() === 'select');
+click(q('#cLock'));                                 // restore the default for later tests
+await wait(20);
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
 await wait(30);
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
+await wait(30);
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'v', bubbles: true }));
+await wait(10);
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
 await wait(30);
 

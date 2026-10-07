@@ -69,7 +69,7 @@ export const ZOOM_MAX = 4;
 export const HISTORY_MAX = 60;
 export const AUTOSAVE_MS = 700;
 
-export const DEFAULT_TOOL = 'rect';   // drag on a fresh canvas and you get a box
+export const DEFAULT_TOOL = 'note';   // text-first: a fresh canvas starts ready to write
 
 /* The whole drawing palette. Deliberately short: five inks, five backgrounds,
    three fonts, one stroke width — the constraint is the feature. */
@@ -85,12 +85,13 @@ export const INKS = [
 export const FILL_ALPHA = 0.13;
 export const FILLS = ['none', 'graphite', 'harbor', 'amber', 'moss', 'rose'];
 
-/** A sensible default background per kind — nothing arrives colourless. */
+/** The default background per kind. Transparent everywhere, the way Excalidraw
+    starts: an outline on the canvas, with a wash added only when you pick one. */
 export const DEFAULT_FILLS = {
-  rect: 'harbor',
-  ellipse: 'amber',
-  diamond: 'moss',
-  container: 'graphite',
+  rect: 'none',
+  ellipse: 'none',
+  diamond: 'none',
+  container: 'none',
   card: 'none',
   note: 'none',
   text: 'none',
@@ -100,9 +101,9 @@ export const DEFAULT_FILLS = {
 /** Three fonts, each with the size tweak that makes it sit right, and its
     average character width in ems — what text wrapping estimates with. */
 export const FONTS = [
+  { key: 'hand', label: 'Hand', stack: 'Excalifont, Caveat, "Bradley Hand", "Segoe Print", cursive', scale: 1.2, charW: 0.5 },
   { key: 'sans', label: 'Sans', stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif', scale: 1, charW: 0.52 },
-  { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif', scale: 1.06, charW: 0.5 },
-  { key: 'hand', label: 'Hand', stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive', scale: 1.42, charW: 0.36 }
+  { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif', scale: 1.06, charW: 0.5 }
 ];
 
 /** Canvas backgrounds. The first is the default: warm paper with dots, which
@@ -239,7 +240,7 @@ export const WRITE_FONTS = [
   { key: 'sans',  label: 'Sans',  stack: 'Inter, -apple-system, "Segoe UI", Helvetica, sans-serif' },
   { key: 'serif', label: 'Serif', stack: '"Source Serif 4", Iowan Old Style, Georgia, serif' },
   { key: 'mono',  label: 'Mono',  stack: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
-  { key: 'hand',  label: 'Hand',  stack: 'Caveat, "Bradley Hand", "Segoe Print", cursive' }
+  { key: 'hand',  label: 'Hand',  stack: 'Excalifont, Caveat, "Bradley Hand", "Segoe Print", cursive' }
 ];
 
 /** A small highlighter palette — enough colour to organise a page, not enough

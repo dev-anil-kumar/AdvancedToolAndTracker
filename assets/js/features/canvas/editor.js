@@ -33,15 +33,26 @@ const svgEl = (tag, attrs) => {
   return node;
 };
 
+/** A per-browser preference, remembered between sessions. Storage may be blocked. */
+function readPref(key, fallback) {
+  try { const v = localStorage.getItem('folio.canvas.' + key); return v == null ? fallback : v; }
+  catch (err) { return fallback; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem('folio.canvas.' + key, String(value)); } catch (err) { /* session only */ }
+}
+
 let scene = null;
-let tool = DEFAULT_TOOL;
+let tool = readPref('tool', DEFAULT_TOOL);           // the last tool used stays chosen
 let ink = INKS[0].hex;
 let fillKey = null;              // null = each kind's own default
 let fontKey = 'hand';
+let fontScaleDefault = Math.min(4, Math.max(0.4, parseFloat(readPref('fontScale', '1')) || 1));
 let theme = readTheme();
 let clipboard = [];
-let toolLocked = false;          // keep the tool after drawing, for repeat work
+let toolLocked = readPref('lock', '1') !== '0';      // keep the tool after drawing, for repeat work
 let selectedIds = new Set();
+let editingId = null;            // the shape whose text is open in the editor
 let drag = null;                 // the interaction in flight
 let spaceDown = false;
 let past = [], future = [];
@@ -60,6 +71,7 @@ export function attachEditor(handlers) {
   host.addEventListener('dblclick', onDoubleClick);
   host.addEventListener('wheel', onWheel, { passive: false });
   host.dataset.theme = theme;
+  host.dataset.tool = tool;
   /* Covers window resizes and focus mode, which resizes the host with no window event. */
   if (typeof ResizeObserver === 'function') new ResizeObserver(() => { if (scene) render(); }).observe(host);
   else addEventListener('resize', () => { if (scene) render(); });
@@ -103,7 +115,7 @@ export const activeFill = () => fillKey;
 export const activeFont = () => fontKey;
 export const clipboardSize = () => clipboard.length;
 export const isToolLocked = () => toolLocked;
-export function setToolLocked(on) { toolLocked = !!on; onChange(); }
+export function setToolLocked(on) { toolLocked = !!on; writePref('lock', toolLocked ? '1' : '0'); onChange(); }
 export const saveStatus = () => saveState;
 export const canUndo = () => past.length > 0;
 export const canRedo = () => future.length > 0;
@@ -129,6 +141,7 @@ export function selectAll() { setSelection(scene ? scene.shapes.map(s => s.id) :
 
 export function setTool(next) {
   tool = next;
+  writePref('tool', next);
   const host = $('#canvasHost');
   if (host) host.dataset.tool = next;
   onChange();
@@ -158,7 +171,30 @@ export function setFont(key) {
 
 /** The style a new shape is born with. */
 function newStyle(kind) {
-  return { fill: fillKey === null ? undefined : fillKey, font: fontKey };
+  return { fill: fillKey === null ? undefined : fillKey, font: fontKey, fontScale: fontScaleDefault };
+}
+
+export const activeFontScale = () => fontScaleDefault;
+const clampScale = (v) => Math.min(4, Math.max(0.4, Math.round(v * 100) / 100));
+
+/**
+ * Step the text size up or down. With a selection it resizes those shapes and
+ * refits their boxes; with none it moves the default that new shapes are born
+ * with, so the next thing you type comes out at the chosen size.
+ */
+export function changeTextSize(factor) {
+  const chosen = selectedShapes().filter(s => s.kind !== 'arrow' || s.text);
+  if (chosen.length) {
+    commit(() => {
+      chosen.forEach(s => { s.fontScale = clampScale((s.fontScale || 1) * factor); fitText(s); });
+      syncArrows(scene);
+    });
+  } else {
+    fontScaleDefault = clampScale(fontScaleDefault * factor);
+    writePref('fontScale', fontScaleDefault);
+    onChange();
+  }
+  if (isEditingText()) refreshEditorFont();
 }
 
 /* ---------- History and saving ---------- */
@@ -272,6 +308,31 @@ const padded = (b, p) => ({ x: b.x - p, y: b.y - p, w: b.w + p * 2, h: b.h + p *
 
 /* ---------- Rendering ---------- */
 
+/*
+ * Dragging and panning fire many pointer events per frame. Rebuilding the whole
+ * scene on each one is what makes a drag feel heavy, so hot paths route through
+ * these two helpers: `onFrame` coalesces work to one repaint per animation
+ * frame, and `paintViewport` moves the camera by touching only the viewBox —
+ * no DOM is rebuilt. A full `render` lays down a grid padded well past the
+ * edges, so a pan slides over ready-drawn dots instead of regenerating them.
+ */
+let frameQueued = false, frameFn = null;
+function onFrame(fn) {
+  frameFn = fn;
+  if (frameQueued) return;
+  frameQueued = true;
+  requestAnimationFrame(() => { frameQueued = false; const f = frameFn; frameFn = null; if (f) f(); });
+}
+
+export function paintViewport() {
+  const svg = $('#scene');
+  if (!svg || !scene) return;
+  const r = hostRect();
+  const w = (r.width || 800) / scene.view.zoom;
+  const h = (r.height || 600) / scene.view.zoom;
+  svg.setAttribute('viewBox', scene.view.x + ' ' + scene.view.y + ' ' + w + ' ' + h);
+}
+
 export function render() {
   const svg = $('#scene');
   if (!svg || !scene) return;
@@ -280,9 +341,10 @@ export function render() {
   const h = (r.height || 600) / scene.view.zoom;
   svg.setAttribute('viewBox', scene.view.x + ' ' + scene.view.y + ' ' + w + ' ' + h);
 
+  const pad = GRID * 6;                              // dots drawn past the edges, so a pan has them ready
   const frag = document.createDocumentFragment();
   frag.appendChild(sketchDefs());
-  frag.appendChild(gridLayer(scene.view.x, scene.view.y, w, h));
+  frag.appendChild(gridLayer(scene.view.x - pad, scene.view.y - pad, w + pad * 2, h + pad * 2));
   drawOrder(scene).forEach(s => frag.appendChild(shapeNode(s)));
 
   if (drag && drag.preview) frag.appendChild(shapeNode(drag.preview, true));
@@ -421,6 +483,10 @@ function shapeNode(s, preview) {
     }));
   }
 
+  /* While a shape's text is open in the editor, leave its rendered text out —
+     the transparent editor sits on top, and drawing both would ghost. */
+  if (s.id === editingId) return g;
+
   if (s.kind === 'card') {
     const { title, body } = splitCard(s.text);
     const { size, titleH } = cardLayout(s);
@@ -445,7 +511,7 @@ const CAP_CENTRE = 0.35;
 function textNode(s, cx, cy, anchor, badge, faded) {
   const box = bounds(s);
   const font = fontOf(s.font);
-  const size = CANVAS_FONT * font.scale;
+  const size = fontSizeOf(s);
   const lineHeight = size * 1.3;
   const lines = wrapText(s.text, s.kind === 'arrow' ? 26 : fitChars(box.w, s));
   const centred = anchor === 'middle' || badge;
@@ -464,6 +530,7 @@ function textNode(s, cx, cy, anchor, badge, faded) {
   const text = svgEl('text', {
     x: cx, y: top.toFixed(2),
     'text-anchor': anchor,
+    'xml:space': 'preserve',            // keep leading spaces and indentation
     fill: faded ? 'var(--ink-3)' : s.ink,
     'font-size': size.toFixed(1),
     'font-family': font.stack,
@@ -476,13 +543,16 @@ function textNode(s, cx, cy, anchor, badge, faded) {
   return text;
 }
 
+/** A shape's rendered text size — font tweak times its own size step. */
+const fontSizeOf = (s) => CANVAS_FONT * fontOf(s.font).scale * (s.fontScale || 1);
+
 /** How many characters fit across a width — the same estimate everywhere text wraps. */
-const charWidth = (s) => CANVAS_FONT * fontOf(s.font).scale * fontOf(s.font).charW;
+const charWidth = (s) => fontSizeOf(s) * fontOf(s.font).charW;
 const fitChars = (w, s) => Math.max(6, Math.floor((w - 18) / charWidth(s)));
 
 /** A card's font size and the height of its title band, which grows with a long title. */
 function cardLayout(s) {
-  const size = CANVAS_FONT * fontOf(s.font).scale;
+  const size = fontSizeOf(s);
   const titleLines = wrapText(splitCard(s.text).title, fitChars(s.w, s)).length;
   return { size, titleH: Math.ceil(titleLines * size * 1.3 + 16) };
 }
@@ -665,7 +735,7 @@ function onPointerMove(e) {
   if (drag.mode === 'pan') {
     scene.view.x = drag.viewX - (e.clientX - drag.originX) / scene.view.zoom;
     scene.view.y = drag.viewY - (e.clientY - drag.originY) / scene.view.zoom;
-    render();
+    onFrame(paintViewport);                          // move the camera only — no rebuild
     return;
   }
 
@@ -675,7 +745,7 @@ function onPointerMove(e) {
       w: Math.abs(point.x - drag.start.x), h: Math.abs(point.y - drag.start.y)
     };
     selectedIds = new Set(scene.shapes.filter(s => intersectsRect(s, drag.marquee)).map(s => s.id));
-    render();
+    onFrame(render);
     onChange();
     return;
   }
@@ -687,7 +757,7 @@ function onPointerMove(e) {
     const end = target ? centre(target) : { x: snap(point.x), y: snap(point.y) };
     drag.preview.points = [centre(from).x, centre(from).y, end.x, end.y];
     drag.preview.to = target ? target.id : null;
-    render();
+    onFrame(render);
     return;
   }
 
@@ -704,7 +774,7 @@ function onPointerMove(e) {
       const target = connectTargetAt(scene, x1, y1, null, prox());
       drag.hoverId = target ? target.id : null;
     }
-    render();
+    onFrame(render);
     return;
   }
 
@@ -733,7 +803,7 @@ function onPointerMove(e) {
     drag.hoverId = looseEndCatcher();
     drag.applied = wanted;
     drag.moved = true;
-    render();
+    onFrame(render);
     return;
   }
 
@@ -750,7 +820,7 @@ function onPointerMove(e) {
       resizeCorner(shape, drag.role, snap(point.x), snap(point.y), e.shiftKey);
       syncArrows(scene);
     }
-    render();
+    onFrame(render);
   }
 }
 
@@ -803,7 +873,7 @@ function onPointerUp() {
   const finished = drag;
   drag = null;
 
-  if (finished.mode === 'pan') { scheduleSave(); return; }
+  if (finished.mode === 'pan') { render(); scheduleSave(); return; }
 
   if (finished.mode === 'marquee') {
     render();
@@ -904,8 +974,16 @@ function onWheel(e) {
   }
   scene.view.x += e.deltaX / scene.view.zoom;
   scene.view.y += e.deltaY / scene.view.zoom;
-  render();
+  onFrame(paintViewport);                            // glide now …
+  settleRender();                                    // … then refill the grid once the wheel stops
   scheduleSave();
+}
+
+/** A full repaint a beat after the last wheel event — tops up the padded grid. */
+let settleTimer = null;
+function settleRender() {
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => { if (scene) render(); }, 140);
 }
 
 /* ---------- Text inside shapes ---------- */
@@ -941,26 +1019,40 @@ export function editText(shape) {
   if (!shape || !scene) return;
   const wrap = $('#textEdit');
   const area = $('#textEditArea');
-  const z = scene.view.zoom;
-  const font = fontOf(shape.font);
 
   placeEditor(shape);
   wrap.hidden = false;
   wrap.dataset.kind = shape.kind;
-  area.style.fontFamily = font.stack;
-  area.style.fontSize = (CANVAS_FONT * font.scale * Math.min(z, 1.6)).toFixed(1) + 'px';
   area.style.lineHeight = '1.3';
   area.style.textAlign = isCentred(shape.kind) ? 'center' : 'left';
   area.value = shape.text || '';
-  centreTextArea(area, isCentred(shape.kind));
   area.dataset.shapeId = shape.id;
+  refreshEditorFont();
+  centreTextArea(area, isCentred(shape.kind));
   textOpenedAt = Date.now();
+  editingId = shape.id;
+  render();                                         // hide the shape's own text behind the editor
 
   requestAnimationFrame(() => {
     if ($('#textEdit').hidden) return;
     area.focus();
     area.select();
   });
+}
+
+/** Match the editor's font and size to the shape it is editing. */
+function refreshEditorFont() {
+  const area = $('#textEditArea');
+  if (!area || !scene) return;
+  const shape = shapeById(scene, area.dataset.shapeId);
+  if (!shape) return;
+  const z = scene.view.zoom;
+  area.style.fontFamily = fontOf(shape.font).stack;
+  area.style.fontSize = (fontSizeOf(shape) * Math.min(z, 1.6)).toFixed(1) + 'px';
+  /* The canvas background is fixed per theme, so colour the editor to suit it:
+     the shape's own ink on a light canvas, a light ink on the dark one (where
+     the finished drawing is colour-inverted and this HTML overlay is not). */
+  area.style.color = theme === 'dark' ? '#e9e7e1' : shape.ink;
 }
 
 /** Float the editor box over a shape — called again on every keystroke as the shape grows. */
@@ -1003,7 +1095,10 @@ export function centreTextArea(area, centred) {
 
 export function hideTextEditor() {
   const wrap = $('#textEdit');
+  const was = editingId;
   if (wrap) wrap.hidden = true;
+  editingId = null;
+  if (was && scene) render();                       // bring the shape's own text back
 }
 
 /** Re-centre as the text changes; wired to the textarea's input event. */
@@ -1051,7 +1146,7 @@ export function commitText() {
  */
 function fitText(shape) {
   if (shape.kind === 'arrow' || !shape.text) return;
-  const size = CANVAS_FONT * fontOf(shape.font).scale;
+  const size = fontSizeOf(shape);
   if (shape.kind === 'text') {
     const raw = shape.text.split('\n');
     const longest = Math.max(...raw.map(l => l.length));
