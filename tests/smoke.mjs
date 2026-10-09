@@ -709,7 +709,7 @@ click(q('#canvasNew'));
 await wait(200);
 ok('canvas view is showing', shownViews() === 'view-canvas', shownViews());
 ok('tool strip built', qa('#cTools .ctool').length === 9, qa('#cTools .ctool').map(b => b.dataset.tool).join(','));
-ok('text box is the default tool', editor0.activeTool() === 'note', editor0.activeTool());
+ok('rich text block is the default tool', editor0.activeTool() === 'rich', editor0.activeTool());
 ok('background swatches built', qa('#cFills .swatch').length === 6);
 ok('font choices built', qa('#cFonts button').length === 3, qa('#cFonts button').map(b => b.dataset.font).join(','));
 ok('ink swatches built', qa('#cInks .swatch').length === 5);
@@ -951,7 +951,11 @@ await clickShape(box());
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'c', metaKey: true, bubbles: true }));
 await wait(40);
 ok('copy fills the clipboard', editor.clipboardSize() === 1, editor.clipboardSize() + ' item');
-d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'v', metaKey: true, bubbles: true }));
+/* ⌘V now flows through the document 'paste' listener. With nothing external on
+   the clipboard, it pastes the shapes held in memory from the copy above. */
+const shapePaste = new window.Event('paste', { bubbles: true, cancelable: true });
+shapePaste.clipboardData = { items: [], getData: () => '' };
+d.dispatchEvent(shapePaste);
 await wait(80);
 ok('paste adds a shape', shapes().length === countBeforePaste + 1, shapes().length + ' shapes');
 const pasted = shapes().at(-1);
@@ -987,28 +991,47 @@ await wait(60);
 ok('the north-east corner keeps the left edge', box().x === before.x - 40 && box().w === before.w + 60,
   [box().x, box().w].join(','));
 
-section('canvas: the text box has no visible edge');
+const setRich = async (html) => {
+  await wait(20);
+  q('#richEditArea').innerHTML = html;
+  q('#richEditArea').dispatchEvent(new window.Event('blur'));
+  await wait(60);
+};
+
+section('canvas: the rich text block');
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 await wait(30);
 await drawShape('n', 300, 500, 520, 580);
-const note = shapes().at(-1);
-ok('N draws a text box', note.kind === 'note', note.kind);
-ok('it starts with no background', note.fill === 'none');
-ok('it opens its editor straight away', !q('#textEdit').hidden);
-await setText('A quiet aside');
-editor.clearSelection();
-await wait(40);
-const noteRect = d.querySelector('#scene .shape[data-kind="note"] rect');
-ok('no border once it has text and is deselected', noteRect.getAttribute('stroke') === 'none',
-  noteRect.getAttribute('stroke'));
-const noteLabel = [...d.querySelectorAll('#scene text')].find(t => t.textContent === 'A quiet aside');
-ok('its text is centred', noteLabel && noteLabel.getAttribute('text-anchor') === 'middle');
-await clickShape(note);
-ok('it is still selectable', editor.selection() && editor.selection().kind === 'note');
-ok('and shows its edge while selected',
-  d.querySelector('#scene .shape[data-kind="note"] rect').getAttribute('stroke') !== 'none');
+const richBlock = shapes().at(-1);
+ok('N draws a rich text block', richBlock.kind === 'rich', richBlock.kind);
+ok('it starts with no background', richBlock.fill === 'none');
+ok('it opens its editor straight away', !q('#richEdit').hidden);
+await setRich('<p><strong>Bold</strong> and plain</p>');
+ok('it keeps the formatting you typed', /<strong>Bold<\/strong>/.test(richBlock.html), richBlock.html);
+ok('and renders as HTML on the canvas',
+  !!d.querySelector('#scene .shape[data-kind="rich"] foreignObject strong'));
+ok('it has a drawn border', d.querySelector('#scene .shape[data-kind="rich"] rect') &&
+  d.querySelector('#scene .shape[data-kind="rich"] rect').getAttribute('stroke') !== 'none');
+await clickShape(richBlock);
+ok('it is still selectable', editor.selection() && editor.selection().kind === 'rich');
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
 await wait(60);
+
+section('canvas: pasting text drops a rich block');
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await wait(20);
+const beforeTextPaste = shapes().length;
+const mdPaste = new window.Event('paste', { bubbles: true, cancelable: true });
+mdPaste.clipboardData = { items: [], getData: (t) => (t === 'text/plain' ? '# Heading\n\n- one\n- two' : '') };
+d.dispatchEvent(mdPaste);
+await wait(60);
+ok('a rich block appears', shapes().length === beforeTextPaste + 1 && shapes().at(-1).kind === 'rich',
+  shapes().at(-1) && shapes().at(-1).kind);
+ok('the Markdown is rendered, not left as text', /<h1>/.test(shapes().at(-1).html), shapes().at(-1).html);
+editor.clearSelection();
+await clickShape(shapes().at(-1));
+d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+await wait(40);
 
 section('canvas: double-click with a draw tool active');
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'r', bubbles: true }));
@@ -1033,11 +1056,11 @@ const emptySpot = toClientPt(-260, 620);
 const beforeEmpty = shapes().length;
 pointer('dblclick', emptySpot[0], emptySpot[1]);
 await wait(60);
-ok('a text box appears where you clicked', shapes().length === beforeEmpty + 1 &&
-  shapes().at(-1).kind === 'note', shapes().at(-1).kind);
-ok('with its editor already open', !q('#textEdit').hidden);
-await setText('Aside');
-ok('and it keeps what you typed', shapes().at(-1).text === 'Aside');
+ok('a rich text block appears where you clicked', shapes().length === beforeEmpty + 1 &&
+  shapes().at(-1).kind === 'rich', shapes().at(-1).kind);
+ok('with its editor already open', !q('#richEdit').hidden);
+await setRich('<p>Aside</p>');
+ok('and it keeps what you typed', /Aside/.test(shapes().at(-1).html));
 editor.clearSelection();
 await clickShape(shapes().at(-1));
 d.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));

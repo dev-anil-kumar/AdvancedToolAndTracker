@@ -413,6 +413,26 @@
         <textarea id="textEditArea" spellcheck="false" aria-label="Text inside this shape"></textarea>
       </div>
 
+      <div class="rich-edit" id="richEdit" hidden>
+        <div class="rich-format" id="richFormat" role="toolbar" aria-label="Text formatting">
+          <button type="button" data-cmd="bold" title="Bold (⌘B)" aria-label="Bold"><b>B</b></button>
+          <button type="button" data-cmd="italic" title="Italic (⌘I)" aria-label="Italic"><i>I</i></button>
+          <button type="button" data-cmd="underline" title="Underline" aria-label="Underline"><u>U</u></button>
+          <button type="button" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><s>S</s></button>
+          <span class="rich-sep" aria-hidden="true"></span>
+          <button type="button" data-cmd="h1" title="Heading 1" aria-label="Heading 1">H1</button>
+          <button type="button" data-cmd="h2" title="Heading 2" aria-label="Heading 2">H2</button>
+          <button type="button" data-cmd="p" title="Body text" aria-label="Body text">¶</button>
+          <span class="rich-sep" aria-hidden="true"></span>
+          <button type="button" data-cmd="ul" title="Bulleted list" aria-label="Bulleted list">•</button>
+          <button type="button" data-cmd="ol" title="Numbered list" aria-label="Numbered list">1.</button>
+          <button type="button" data-cmd="quote" title="Quote" aria-label="Quote">❝</button>
+          <button type="button" data-cmd="clear" title="Clear formatting" aria-label="Clear formatting">⌫</button>
+        </div>
+        <div class="rich-area" id="richEditArea" contenteditable="true" spellcheck="false"
+             role="textbox" aria-multiline="true" aria-label="Rich text block"></div>
+      </div>
+
       <div class="canvas-empty" id="canvasEmpty">
         <div class="box">
           <h2>An empty canvas</h2>
@@ -421,7 +441,8 @@
           <p>Shapes line up with each other as you drag them. Press <kbd>?</kbd> for every shortcut.
              Every object takes text: double-click it, or select it and press <kbd>Enter</kbd>.
              Select a shape and drag a side dot to pull out an arrow that stays attached.
-             <kbd>N</kbd> gives a text box with no visible edge. <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copies and pastes,
+             <kbd>N</kbd> drops a rich text block — paste text, Markdown or an image and it lands in one, formatting kept.
+             <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copies and pastes,
              corners resize, <kbd>space</kbd>-drag pans, <kbd>shift</kbd> keeps things square.</p>
         </div>
       </div>

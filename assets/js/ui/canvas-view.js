@@ -17,14 +17,16 @@ import {
 } from '../features/drawings.js';
 import {
   activeFill, activeFont, activeTheme, attachEditor, setTheme, activeScene, activeTool, canRedo, canUndo,
-  changeTextSize, clearSelection, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
-  pasteClipboard, reorderSelection, setFill, setFont, setToolLocked,
+  addRich, changeTextSize, clearSelection, commitEditing, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
+  pasteClipboard, reorderSelection, richFormat, setFill, setFont, setToolLocked,
   deleteSelection, detachSelection, duplicateSelection, editSelectionText, fitView,
   flushSave, hideTextEditor, isEditingText, loadScene, nudgeSelection, onTextBlur, redo,
   render, saveStatus, selectAll, selection, selectedShapes, selectionCount,
   setInk, setTool, toJSON, toPNG, toSVG, undo, zoomBy
 } from '../features/canvas/editor.js';
 import { fillColour, SHORTCUTS } from '../features/canvas/model.js';
+import { looksLikeMarkdown } from '../features/write/paste.js';
+import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '../core/config.js';
 
 const TOOLS = [
   { tool: 'select', key: 'V', label: 'Select', hint: 'Select and move — drag empty space to marquee, space-drag to pan' },
@@ -33,7 +35,7 @@ const TOOLS = [
   { tool: 'diamond', key: 'D', label: 'Decision', hint: 'Decision — a rhombus for flow branches; label its arrows Yes / No' },
   { tool: 'arrow', key: 'A', label: 'Arrow', hint: 'Arrow — drop an end on a shape to connect it' },
   { tool: 'text', key: 'T', label: 'Text', hint: 'A single text label' },
-  { tool: 'note', key: 'N', label: 'Text box', hint: 'Text box — a text container with no visible boundary' },
+  { tool: 'rich', key: 'N', label: 'Text block', hint: 'Text block — formatted rich text, Markdown and images; paste anything onto the canvas and it lands here' },
   { tool: 'container', key: 'F', label: 'Container', hint: 'Container — moving it moves everything inside' },
   { tool: 'card', key: 'B', label: 'Card', hint: 'Card — a box with a title and a body; the first line is the title' }
 ];
@@ -45,7 +47,7 @@ const ICONS = {
   diamond: '<path d="M12 3l9 9-9 9-9-9z"/>',
   arrow: '<path d="M4 18L20 6M20 6h-6M20 6v6"/>',
   text: '<path d="M5 6h14M12 6v13"/>',
-  note: '<rect x="3.5" y="6" width="17" height="12" rx="2" stroke-dasharray="2.5 2.5"/><path d="M8 10.5h8M8 14h5"/>',
+  rich: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 9h10M7 12h10M7 15h6"/>',
   container: '<rect x="3.5" y="5.5" width="17" height="13" rx="2.5" stroke-dasharray="3 2.5"/><path d="M7 10h4"/>',
   card: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M7 13.5h8M7 16.5h5"/>'
 };
@@ -206,7 +208,7 @@ export function syncToolbar() {
 const SHORTCUT_GROUPS = [
   ['Tools', [
     ['R', 'Rectangle'], ['C', 'Circle'], ['A', 'Arrow'],
-    ['T', 'Text label'], ['N', 'Text box'], ['F', 'Container'], ['B', 'Card (title + body)'], ['V', 'Select']
+    ['T', 'Text label'], ['N', 'Text block (rich text · paste)'], ['F', 'Container'], ['B', 'Card (title + body)'], ['V', 'Select']
   ]],
   ['Editing', [
     ['Double-click', 'Write inside a shape — or on empty canvas for a new text box'],
@@ -373,7 +375,8 @@ document.addEventListener('keydown', e => {
   if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectAll(); return; }
   if (mod && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); copySelection(); return; }
   if (mod && (e.key === 'x' || e.key === 'X')) { e.preventDefault(); cutSelection(); return; }
-  if (mod && (e.key === 'v' || e.key === 'V')) { e.preventDefault(); pasteClipboard(); return; }
+  /* ⌘V is left to the document 'paste' listener below, so clipboard text and
+     images land on the canvas with their formatting intact. */
   if (mod && e.key === ']') { e.preventDefault(); reorderSelection(true); return; }
   if (mod && e.key === '[') { e.preventDefault(); reorderSelection(false); return; }
   if (mod) return;
@@ -403,5 +406,75 @@ $('#canvasHost').addEventListener('drop', e => {
 on(EVENTS.DRAWINGS, renderDrawings);
 on(EVENTS.VIEW, name => {
   if (name === 'canvas' && activeScene()) requestAnimationFrame(render);
-  if (name !== 'canvas' && activeScene()) { commitText(); flushSave(); }
+  if (name !== 'canvas' && activeScene()) { commitEditing(); flushSave(); }
+});
+
+/* ---------- Rich text block: inline editor + per-word formatting ---------- */
+
+$('#richEditArea').addEventListener('blur', e => {
+  if ($('#richEdit').hidden) return;
+  /* The format bar re-focuses the editor on mousedown, so clicking it never
+     reaches here; any other blur means the user is done. */
+  if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#richFormat')) return;
+  commitEditing();
+});
+$('#richEditArea').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); commitEditing(); }
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitEditing(); }
+  /* Keep editing shortcuts (bold/italic) from reaching the canvas handler. */
+  e.stopPropagation();
+});
+$('#richFormat').addEventListener('mousedown', e => {
+  const btn = e.target.closest('[data-cmd]');
+  if (!btn) return;
+  e.preventDefault();              // don't blur the editor — keep the selection
+  richFormat(btn.dataset.cmd);
+});
+
+/* ---------- Paste anything: text, Markdown or an image → a rich block ---------- */
+
+function plainToHtml(text) {
+  const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return esc.split(/\n{2,}/).map(p => '<p>' + p.replace(/\n/g, '<br>') + '</p>').join('');
+}
+
+async function pasteImageFile(file) {
+  if (!IMAGE_TYPES.includes(file.type)) { toast('That image type isn’t supported.'); return; }
+  if (file.size > IMAGE_MAX_BYTES) { toast('That image is too large to drop on the canvas.'); return; }
+  const dataUrl = await new Promise(res => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = () => res(null);
+    fr.readAsDataURL(file);
+  });
+  if (!dataUrl) { toast('Couldn’t read that image.'); return; }
+  const alt = (file.name || 'image').replace(/[<>"]/g, '');
+  /* Image on top, an empty caption line below — the container the ask wanted. */
+  addRich('<p><img src="' + dataUrl + '" alt="' + alt + '"></p><p></p>', true);
+}
+
+document.addEventListener('paste', e => {
+  if (document.body.dataset.view !== 'canvas' || !activeScene()) return;
+  const t = e.target;
+  if (isEditingText() || (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable))) return;
+  const dt = e.clipboardData;
+  if (!dt) return;
+
+  const imageItem = [...(dt.items || [])].find(it => it.kind === 'file' && /^image\//.test(it.type));
+  if (imageItem) { e.preventDefault(); pasteImageFile(imageItem.getAsFile()); return; }
+
+  const html = dt.getData('text/html');
+  const text = dt.getData('text/plain');
+
+  /* Shapes copied from the canvas, or an empty system clipboard with shapes
+     still held in memory, go to the shape paster. Everything else becomes a
+     rich block — HTML kept as-is, Markdown rendered, plain text wrapped. */
+  if ((text && text.includes('folio-shapes')) || (!(html && html.trim()) && !(text && text.trim()))) {
+    e.preventDefault(); pasteClipboard(); return;
+  }
+  if (html && html.trim()) { e.preventDefault(); addRich(html); return; }
+  if (text && text.trim()) {
+    e.preventDefault();
+    addRich(looksLikeMarkdown(text) && typeof marked !== 'undefined' ? marked.parse(text) : plainToHtml(text));
+  }
 });

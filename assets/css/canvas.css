@@ -215,6 +215,80 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
 .text-edit[data-kind="container"] textarea,
 .text-edit[data-kind="text"] textarea { text-align: left; }
 
+/* ---------- Rich text blocks ----------
+   The rendered HTML lives inside an SVG <foreignObject>, so it pans and zooms
+   with the drawing. It never takes clicks — those belong to the block, which is
+   selected and moved like any shape; you double-click (or press Enter) to edit. */
+/* The rendered block never takes clicks — selecting and moving it is the SVG
+   shape's job; you edit through the overlay, not this. */
+#scene foreignObject { overflow: visible; pointer-events: none; }
+.rich-content {
+  box-sizing: border-box; width: 100%; padding: 0; margin: 0;
+  pointer-events: none; user-select: none;
+  font-family: Inter, -apple-system, "Segoe UI", Helvetica, sans-serif;
+  font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; word-break: break-word;
+}
+.rich-content > :first-child { margin-top: 0; }
+.rich-content > :last-child { margin-bottom: 0; }
+.rich-content p { margin: 0 0 .5em; }
+.rich-content h1 { font-size: 1.7em; font-weight: 700; margin: .1em 0 .3em; line-height: 1.2; }
+.rich-content h2 { font-size: 1.35em; font-weight: 700; margin: .2em 0 .3em; line-height: 1.25; }
+.rich-content h3 { font-size: 1.12em; font-weight: 700; margin: .2em 0 .3em; }
+.rich-content ul, .rich-content ol { margin: 0 0 .5em; padding-left: 1.4em; }
+.rich-content li { margin: .1em 0; }
+.rich-content blockquote {
+  margin: 0 0 .5em; padding: .1em 0 .1em .8em;
+  border-left: 3px solid currentColor; opacity: .85;
+}
+.rich-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em; background: rgba(128,128,128,.16); padding: .05em .35em; border-radius: 4px;
+}
+.rich-content pre {
+  margin: 0 0 .5em; padding: .5em .7em; border-radius: 7px;
+  background: rgba(128,128,128,.14); overflow-x: auto;
+}
+.rich-content pre code { background: none; padding: 0; }
+.rich-content a { color: #1f6f95; text-decoration: underline; }
+.rich-content img { max-width: 100%; height: auto; display: block; border-radius: 6px; margin: 0 0 .35em; }
+.rich-content table { border-collapse: collapse; margin: 0 0 .5em; }
+.rich-content th, .rich-content td { border: 1px solid rgba(128,128,128,.4); padding: .2em .5em; }
+.rich-content hr { border: 0; border-top: 1px solid rgba(128,128,128,.4); margin: .5em 0; }
+.rich-placeholder { color: var(--ink-3); font-style: italic; }
+.rich-content.rich-measure { position: absolute; left: -99999px; top: 0; visibility: hidden; }
+
+/* On the dark canvas everything in the scene is colour-inverted; pictures would
+   come out as negatives, so flip them back. Text stays inverted, like every
+   other ink, so it keeps its contrast. */
+.canvas-host[data-theme="dark"] #scene foreignObject img { filter: invert(1) hue-rotate(180deg); }
+
+/* The inline rich editor: a real contentEditable floated over the block. */
+.rich-edit { position: absolute; z-index: 8; }
+.rich-area {
+  box-sizing: border-box; min-width: 120px;
+  font-family: Inter, -apple-system, "Segoe UI", Helvetica, sans-serif;
+  font-size: 14px; line-height: 1.45; color: var(--ink);
+  background: var(--surface); border: 1px dashed var(--accent); border-radius: 10px;
+  outline: none; overflow-wrap: anywhere; overflow: auto;
+}
+.rich-area:empty::before { content: "Type, or paste text or an image…"; color: var(--ink-3); }
+.canvas-host[data-theme="dark"] .rich-area { color: #e9e7e1; caret-color: #e9e7e1; background: #26272b; border-color: #6ea8c8; }
+
+/* The floating format bar, just above the editor. */
+.rich-format {
+  position: absolute; bottom: calc(100% + 6px); left: 0;
+  display: flex; align-items: center; gap: 1px; padding: 3px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--pop);
+  white-space: nowrap;
+}
+.rich-format button {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  min-width: 26px; height: 24px; padding: 0 6px; border-radius: 5px;
+  font-size: 12.5px; color: var(--ink-2); line-height: 1;
+}
+.rich-format button:hover { background: var(--surface); color: var(--ink); }
+.rich-format .rich-sep { width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
+
 /* ---------- Alignment guides, tool lock, shortcuts ---------- */
 #scene .guides line { stroke: var(--danger); stroke-dasharray: 3 3; opacity: .85; }
 .btn.lock svg { width: 13px; height: 13px; }

@@ -19,6 +19,7 @@ import {
 import { $, clamp } from '../../core/dom.js';
 import { toast } from '../../core/toast.js';
 import { saveDrawing } from '../drawings.js';
+import { sanitizeHtml } from '../write/paste.js';
 import {
   arrowEnds, attachLooseEnds, bindArrow, hitTest, splitCard, bounds, centre, connectTargetAt, constrainBox, constrainLine,
   boundsOfAll, defaultSized, drawOrder, fillColour, fontOf, intersectsRect, isCentred,
@@ -43,7 +44,7 @@ function writePref(key, value) {
 }
 
 let scene = null;
-let tool = readPref('tool', DEFAULT_TOOL);           // the last tool used stays chosen
+let tool = DEFAULT_TOOL;          // a fresh session always starts on the default tool — the last one isn't remembered
 let ink = INKS[0].hex;
 let fillKey = null;              // null = each kind's own default
 let fontKey = 'hand';
@@ -99,6 +100,9 @@ export function setTheme(key) {
 
 export function loadScene(next) {
   scene = next;
+  /* Rich blocks carry HTML; scrub it once on the way in, so an imported or
+     stored drawing can never inject markup the render path trusts blindly. */
+  if (scene) scene.shapes.forEach(s => { if (s.kind === 'rich') s.html = sanitizeHtml(s.html); });
   selectedIds = new Set();
   past = []; future = [];
   saveState = 'saved';
@@ -141,7 +145,6 @@ export function selectAll() { setSelection(scene ? scene.shapes.map(s => s.id) :
 
 export function setTool(next) {
   tool = next;
-  writePref('tool', next);
   const host = $('#canvasHost');
   if (host) host.dataset.tool = next;
   onChange();
@@ -476,6 +479,13 @@ function shapeNode(s, preview) {
       x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h), rx: 7,
       fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
     }));
+  } else if (s.kind === 'rich') {
+    /* A rich block is a rounded rectangle; its formatted HTML content is laid
+       in below (after the editing check) via a foreignObject. */
+    g.appendChild(svgEl('rect', {
+      x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h), rx: 10,
+      fill, stroke: s.ink, 'stroke-width': STROKE_W, filter: 'url(#sketch)'
+    }));
   } else {
     g.appendChild(svgEl('rect', {
       x: s.x, y: s.y, width: Math.max(1, s.w), height: Math.max(1, s.h),
@@ -486,6 +496,8 @@ function shapeNode(s, preview) {
   /* While a shape's text is open in the editor, leave its rendered text out —
      the transparent editor sits on top, and drawing both would ghost. */
   if (s.id === editingId) return g;
+
+  if (s.kind === 'rich') { g.appendChild(richBody(s)); return g; }
 
   if (s.kind === 'card') {
     const { title, body } = splitCard(s.text);
@@ -555,6 +567,26 @@ function cardLayout(s) {
   const size = fontSizeOf(s);
   const titleLines = wrapText(splitCard(s.text).title, fitChars(s.w, s)).length;
   return { size, titleH: Math.ceil(titleLines * size * 1.3 + 16) };
+}
+
+/* ---------- Rich text blocks ---------- */
+
+const RICH_PAD = 12;              // gap between the block's border and its HTML
+
+/** A rich block's formatted HTML, laid into the SVG with a foreignObject so it
+    pans and zooms with the drawing and travels into an exported SVG. */
+function richBody(s) {
+  const fo = svgEl('foreignObject', {
+    x: s.x + RICH_PAD, y: s.y + RICH_PAD,
+    width: Math.max(1, s.w - RICH_PAD * 2), height: Math.max(1, s.h - RICH_PAD * 2)
+  });
+  const div = document.createElement('div');
+  div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  div.className = 'rich-content';
+  div.style.color = s.ink;
+  div.innerHTML = s.html || '<p class="rich-placeholder">Type, or paste text or an image…</p>';
+  fo.appendChild(div);
+  return fo;
 }
 
 function selectionLayer(chosen) {
@@ -630,7 +662,7 @@ const prox = () => PROXIMITY / scene.view.zoom;
 /* ---------- Pointer interaction ---------- */
 
 function inTextEditor(e) {
-  return !!(e.target && e.target.closest && e.target.closest('#textEdit'));
+  return !!(e.target && e.target.closest && e.target.closest('#textEdit, #richEdit'));
 }
 
 function onPointerDown(e) {
@@ -922,10 +954,11 @@ function onPointerUp() {
     render();
     scheduleSave();
     onChange();
-    /* Only the text tool implies typing. Shapes get a label on double-click,
+    /* Only the text-ish tools imply typing. Shapes get a label on double-click,
        Enter, or the Add text button — drawing three boxes in a row should not
-       drop you into a textarea three times. */
-    if (shape.kind === 'text' || shape.kind === 'note' || shape.kind === 'card') editText(shape);
+       drop you into an editor three times. */
+    if (shape.kind === 'rich') editRich(shape);
+    else if (shape.kind === 'text' || shape.kind === 'note' || shape.kind === 'card') editText(shape);
     return;
   }
 
@@ -936,6 +969,7 @@ function onPointerUp() {
   if (finished.mode === 'resize') {
     const shape = shapeById(scene, finished.id);
     if (shape && shape.kind === 'arrow') bindArrow(scene, shape);
+    if (shape && shape.kind === 'rich') fitRich(shape);   // height tracks the new width
   }
   attachLooseEnds(scene, prox());
   reparentAll(scene);
@@ -994,19 +1028,19 @@ function onDoubleClick(e) {
   const hit = shapeAt(scene, point.x, point.y);
 
   if (!hit) {
-    /* Double-clicking nothing means "I want to write here". */
+    /* Double-clicking nothing means "I want to write here" — a rich text block. */
+    const block = defaultSized('rich', snap(point.x), snap(point.y), ink, newStyle('rich'));
     commit(() => {
-      const note = defaultSized('note', snap(point.x), snap(point.y), ink, newStyle('note'));
-      scene.shapes.push(note);
+      scene.shapes.push(block);
       reparentAll(scene);
-      selectedIds = new Set([note.id]);
-      editText(note);
+      selectedIds = new Set([block.id]);
     });
+    editRich(block);
     return;
   }
   selectedIds = new Set([hit.id]);
   render();
-  editText(hit);
+  editShapeText(hit);
 }
 
 /**
@@ -1094,11 +1128,13 @@ export function centreTextArea(area, centred) {
 }
 
 export function hideTextEditor() {
-  const wrap = $('#textEdit');
   const was = editingId;
+  const wrap = $('#textEdit');
   if (wrap) wrap.hidden = true;
+  const rich = $('#richEdit');
+  if (rich) rich.hidden = true;
   editingId = null;
-  if (was && scene) render();                       // bring the shape's own text back
+  if (was && scene) render();                       // bring the shape's own content back
 }
 
 /** Re-centre as the text changes; wired to the textarea's input event. */
@@ -1145,6 +1181,7 @@ export function commitText() {
  * every other shape only grows taller, never giving back room you drew.
  */
 function fitText(shape) {
+  if (shape.kind === 'rich') { fitRich(shape); return; }
   if (shape.kind === 'arrow' || !shape.text) return;
   const size = fontSizeOf(shape);
   if (shape.kind === 'text') {
@@ -1162,6 +1199,22 @@ function fitText(shape) {
   if (needed > shape.h) shape.h = needed;
 }
 
+/** Height a rich block needs for its HTML at the current width — measured with
+    a real, off-screen copy of the content, so wrapping and images count. */
+const MIN_RICH_H = 44;
+let richMeasurer = null;
+function fitRich(shape) {
+  if (!richMeasurer) {
+    richMeasurer = document.createElement('div');
+    richMeasurer.className = 'rich-content rich-measure';
+    richMeasurer.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(richMeasurer);
+  }
+  richMeasurer.style.width = Math.max(40, shape.w - RICH_PAD * 2) + 'px';
+  richMeasurer.innerHTML = shape.html || '<p>Text</p>';
+  shape.h = Math.max(MIN_RICH_H, Math.ceil(richMeasurer.scrollHeight + RICH_PAD * 2));
+}
+
 /** A blur in the first moments after opening means focus was stolen, not given up. */
 export function onTextBlur() {
   const area = $('#textEditArea');
@@ -1171,15 +1224,127 @@ export function onTextBlur() {
 }
 
 export function isEditingText() {
-  const wrap = $('#textEdit');
-  return !!wrap && !wrap.hidden;
+  const wrap = $('#textEdit'), rich = $('#richEdit');
+  return (!!wrap && !wrap.hidden) || (!!rich && !rich.hidden);
+}
+
+/** Commit whichever editor — plain textarea or rich block — is open. */
+export function commitEditing() {
+  if ($('#richEdit') && !$('#richEdit').hidden) commitRich();
+  else commitText();
+}
+
+/** Open the right editor for a shape: the rich block gets the HTML editor. */
+export function editShapeText(shape) {
+  if (shape && shape.kind === 'rich') editRich(shape);
+  else editText(shape);
 }
 
 /** Edit the selected shape's text — the toolbar and Enter both land here. */
 export function editSelectionText() {
   const shape = selection();
   if (!shape) { toast('Select one shape first, then add text.'); return; }
-  editText(shape);
+  editShapeText(shape);
+}
+
+/* ---------- Rich block editing (contentEditable + per-word styling) ---------- */
+
+/** Open a rich block for editing in a contentEditable floated over it. */
+export function editRich(shape) {
+  if (!shape || !scene) return;
+  const wrap = $('#richEdit');
+  const area = $('#richEditArea');
+  editingId = shape.id;
+  area.innerHTML = shape.html || '';
+  wrap.hidden = false;
+  placeRichEditor(shape);
+  render();                                         // hide the block's own body behind the editor
+  textOpenedAt = Date.now();
+  requestAnimationFrame(() => {
+    if ($('#richEdit').hidden) return;
+    area.focus();
+    placeCaretEnd(area);
+  });
+}
+
+/** Float the rich editor (and its format bar) over the block. */
+function placeRichEditor(shape) {
+  const wrap = $('#richEdit');
+  const b = bounds(shape);
+  const z = scene.view.zoom;
+  wrap.style.left = Math.round((b.x - scene.view.x) * z) + 'px';
+  wrap.style.top = Math.round((b.y - scene.view.y) * z) + 'px';
+  wrap.style.width = Math.round(Math.max(120, b.w * z)) + 'px';
+  wrap.style.minHeight = Math.round(Math.max(44, b.h * z)) + 'px';
+  $('#richEditArea').style.padding = Math.round(RICH_PAD * z) + 'px';
+}
+
+function placeCaretEnd(node) {
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (err) { /* selection unavailable — the focus alone is enough */ }
+}
+
+/** Commit the rich editor's HTML back to its block. */
+export function commitRich() {
+  const wrap = $('#richEdit');
+  const area = $('#richEditArea');
+  if (!wrap || wrap.hidden || !area || !scene) return;
+  const shape = shapeById(scene, editingId);
+  const html = sanitizeHtml(area.innerHTML);
+  const empty = !/\S/.test(stripTags(html)) && !/<img/i.test(html);
+  hideTextEditor();
+  if (!shape) return;
+  if (empty) {                                      // an empty block is a ghost — drop it
+    commit(() => {
+      scene.shapes = scene.shapes.filter(s => s.id !== shape.id);
+      selectedIds.delete(shape.id);
+    });
+    return;
+  }
+  if (shape.html === html) return;
+  commit(() => { shape.html = html; fitRich(shape); });
+}
+
+const stripTags = (html) => String(html || '').replace(/<[^>]*>/g, ' ');
+
+/**
+ * Apply a formatting command to the current selection in the rich editor.
+ * execCommand is deprecated but is the only one-call rich-text primitive every
+ * browser still ships — a hand-rolled range editor would be a bug farm.
+ * ponytail: execCommand rich text; revisit only if a browser drops it.
+ */
+export function richFormat(cmd) {
+  const area = $('#richEditArea');
+  if (!area || $('#richEdit').hidden) return;
+  area.focus();
+  const run = (c, v) => { try { document.execCommand(c, false, v); } catch (err) { /* unsupported */ } };
+  if (cmd === 'h1' || cmd === 'h2' || cmd === 'h3') run('formatBlock', cmd.toUpperCase());
+  else if (cmd === 'p') run('formatBlock', 'P');
+  else if (cmd === 'ul') run('insertUnorderedList');
+  else if (cmd === 'ol') run('insertOrderedList');
+  else if (cmd === 'quote') run('formatBlock', 'BLOCKQUOTE');
+  else if (cmd === 'clear') { run('removeFormat'); run('formatBlock', 'P'); }
+  else run(cmd);                                    // bold, italic, underline, strikeThrough
+}
+
+/** Create a rich block from HTML (a paste, or the Rich tool). Centred in view. */
+export function addRich(html, open) {
+  if (!scene) return null;
+  const r = hostRect();
+  const at = toScene(r.left + (r.width || 800) / 2, r.top + (r.height || 600) / 3);
+  const width = 300;
+  const shape = makeShape('rich', at.x - width / 2, at.y, at.x + width / 2, at.y + 40, ink, newStyle('rich'));
+  shape.html = sanitizeHtml(html);
+  fitRich(shape);
+  commit(() => { scene.shapes.push(shape); reparentAll(scene); selectedIds = new Set([shape.id]); });
+  if (open) editRich(shape);
+  return shape;
 }
 
 /* ---------- Commands ---------- */

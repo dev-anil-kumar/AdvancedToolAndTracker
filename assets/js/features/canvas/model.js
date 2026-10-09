@@ -17,12 +17,13 @@ import {
 } from '../../core/config.js';
 import { uid } from '../../core/dom.js';
 
-export const KINDS = ['rect', 'ellipse', 'diamond', 'arrow', 'text', 'note', 'container', 'card'];
-export const BOXY = ['rect', 'ellipse', 'diamond', 'container', 'text', 'note', 'card'];
+export const KINDS = ['rect', 'ellipse', 'diamond', 'arrow', 'text', 'note', 'container', 'card', 'rich'];
+export const BOXY = ['rect', 'ellipse', 'diamond', 'container', 'text', 'note', 'card', 'rich'];
 
-/** Tool shortcuts. */
+/** Tool shortcuts. 'n' now gives the rich text block — the old borderless
+    "note" is kept only so existing drawings still open. */
 export const SHORTCUTS = {
-  v: 'select', r: 'rect', c: 'ellipse', d: 'diamond', a: 'arrow', t: 'text', n: 'note', f: 'container', b: 'card'
+  v: 'select', r: 'rect', c: 'ellipse', d: 'diamond', a: 'arrow', t: 'text', n: 'rich', f: 'container', b: 'card'
 };
 
 /** Kinds whose text sits in the middle of the shape. */
@@ -56,7 +57,7 @@ export function shapeById(scene, id) {
 /** A shape from a drag, normalised so width and height are positive. */
 export function makeShape(kind, x0, y0, x1, y1, ink, style) {
   const base = {
-    id: uid(), kind, ink, text: '', parent: null,
+    id: uid(), kind, ink, text: '', html: '', parent: null,
     fill: (style && style.fill) || DEFAULT_FILLS[kind] || 'none',
     font: (style && style.font) || 'hand',
     fontScale: (style && style.fontScale) || 1
@@ -72,7 +73,7 @@ export function makeShape(kind, x0, y0, x1, y1, ink, style) {
 /** A click rather than a drag still deserves a shape, at a sensible size. */
 export function defaultSized(kind, x, y, ink, style) {
   if (kind === 'arrow') return makeShape('arrow', x, y, x + DEFAULT_SHAPE_W, y, ink, style);
-  const sizes = { text: [160, 30], note: [200, 90], container: [DEFAULT_SHAPE_W * 2, DEFAULT_SHAPE_H * 2], card: [220, 130] };
+  const sizes = { text: [160, 30], note: [200, 90], rich: [280, 120], container: [DEFAULT_SHAPE_W * 2, DEFAULT_SHAPE_H * 2], card: [220, 130] };
   const [w, h] = sizes[kind] || [DEFAULT_SHAPE_W, DEFAULT_SHAPE_H];
   return makeShape(kind, x - w / 2, y - h / 2, x + w / 2, y + h / 2, ink, style);
 }
@@ -412,6 +413,7 @@ export function parseScene(json, fallbackName) {
     kind: s.kind,
     ink: s.ink || '#3d4650',
     text: typeof s.text === 'string' ? s.text : '',
+    html: typeof s.html === 'string' ? s.html : '',   // rich blocks; sanitised when the scene loads
     parent: s.parent || null,
     fill: s.fill || DEFAULT_FILLS[s.kind] || 'none',
     font: fontOf(s.font).key,

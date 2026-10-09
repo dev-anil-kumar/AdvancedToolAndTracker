@@ -69,7 +69,7 @@ export const ZOOM_MAX = 4;
 export const HISTORY_MAX = 60;
 export const AUTOSAVE_MS = 700;
 
-export const DEFAULT_TOOL = 'note';   // text-first: a fresh canvas starts ready to write
+export const DEFAULT_TOOL = 'rich';   // text-first: a fresh canvas starts ready to write a rich text block
 
 /* The whole drawing palette. Deliberately short: five inks, five backgrounds,
    three fonts, one stroke width — the constraint is the feature. */
@@ -95,6 +95,7 @@ export const DEFAULT_FILLS = {
   card: 'none',
   note: 'none',
   text: 'none',
+  rich: 'none',
   arrow: 'none'
 };
 
