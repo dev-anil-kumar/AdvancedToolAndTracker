@@ -136,3 +136,6 @@ textarea.note-input{min-height:30vh}
 .notes-none .empty-line{padding:6px 6px 8px}
 .notes-none strong{color:var(--ink-2)}
 .notes-none .btn{margin:10px 6px 0}
+
+/* Mermaid diagrams (md/mermaid.js) — white card so the neutral theme reads in dark mode too. */
+img[alt="Mermaid diagram"] { max-width: 100%; background: #fff; padding: 12px; border-radius: 8px; }

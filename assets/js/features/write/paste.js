@@ -17,6 +17,7 @@
  * uses them — no import needed, just the bare identifiers.
  */
 import { insertImageFile } from './images.js';
+import { renderMermaid } from '../../md/mermaid.js';
 
 /* ---------- The paste allowlist ---------- */
 
@@ -196,11 +197,12 @@ function insertPlainText(text, ctx, opts) {
   insertHtmlAtCaret(html, ctx);
 }
 
-function insertSmartText(text, ctx) {
-  const html = looksLikeMarkdown(text) && typeof marked !== 'undefined'
-    ? sanitizeHtml(marked.parse(text))
-    : plainTextToHtml(text);
-  insertHtmlAtCaret(html, ctx);
+async function insertSmartText(text, ctx) {
+  if (!looksLikeMarkdown(text) || typeof marked === 'undefined') return insertHtmlAtCaret(plainTextToHtml(text), ctx);
+  const scratch = document.createElement('div');
+  scratch.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  await renderMermaid(scratch);   // before the allowlist, which drops the language-* class
+  insertHtmlAtCaret(sanitizeHtml(scratch.innerHTML), ctx);
 }
 
 /* ---------- Paste event ---------- */
@@ -237,7 +239,7 @@ async function onPaste(e, ctx) {
   const text = dt.getData('text/plain');
   if (text) {
     e.preventDefault();
-    insertSmartText(text, ctx);
+    await insertSmartText(text, ctx);
   }
 }
 

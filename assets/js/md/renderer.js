@@ -7,6 +7,7 @@
  * Nothing is inserted into the document without passing through DOMPurify.
  */
 import { el } from '../core/dom.js';
+import { renderMermaid } from './mermaid.js';
 
 marked.use({ gfm: true, breaks: false });
 
@@ -14,6 +15,7 @@ export function renderMarkdown(article, src) {
   const html = marked.parse(src == null ? '' : String(src));
   article.innerHTML = DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, ADD_ATTR: ['target', 'rel'] });
   enhance(article);
+  renderMermaid(article);
 }
 
 function slugify(text, seen) {
