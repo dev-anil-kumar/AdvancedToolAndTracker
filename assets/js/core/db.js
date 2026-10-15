@@ -11,6 +11,13 @@ import { toast } from './toast.js';
 const mem = Object.fromEntries(STORES.map(name => [name, new Map()]));
 let dbPromise = null, storageWarned = false;
 
+/* A cleared store stays cleared: a save still pending in an open view is
+   dropped, and other open tabs (holding the old copy) reload instead of
+   writing it back. */
+const cleared = new Set();
+const chan = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(DB_NAME);
+if (chan) { chan.onmessage = e => { if (e.data === 'cleared') location.reload(); }; chan.unref?.(); }
+
 export function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve) => {
@@ -38,6 +45,7 @@ export async function dbAll(store) {
   });
 }
 export async function dbPut(store, value) {
+  if (cleared.has(store)) return value;
   const db = await openDB();
   if (!db) { mem[store].set(value.id, value); return value; }
   return new Promise((res, rej) => {
@@ -59,12 +67,13 @@ export async function dbDel(store, id) {
   });
 }
 export async function dbClear(store) {
+  cleared.add(store);
   const db = await openDB();
   if (!db) { mem[store].clear(); return; }
   return new Promise((res, rej) => {
     const t = db.transaction(store, 'readwrite');
     t.objectStore(store).clear();
-    t.oncomplete = () => res();
+    t.oncomplete = () => { chan?.postMessage('cleared'); res(); };
     t.onerror = () => rej(t.error);
   });
 }
