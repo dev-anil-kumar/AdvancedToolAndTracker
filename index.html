@@ -365,8 +365,9 @@
       <div class="cfonts" id="cFonts" role="group" aria-label="Font"></div>
 
       <div class="ctextsize" role="group" aria-label="Text size">
-        <button id="cTextSmaller" type="button" aria-label="Smaller text" title="Smaller text">A</button>
-        <button id="cTextBigger" type="button" aria-label="Larger text" title="Larger text">A</button>
+        <button id="cTextSmaller" type="button" aria-label="Smaller text" title="Smaller text (⇧⌘,)">A</button>
+        <span class="ctextsize-val" id="cTextSize" aria-live="polite">100%</span>
+        <button id="cTextBigger" type="button" aria-label="Larger text" title="Larger text (⇧⌘.)">A</button>
       </div>
 
       <div class="csep" aria-hidden="true"></div>
@@ -428,6 +429,9 @@
           <button type="button" data-cmd="ol" title="Numbered list" aria-label="Numbered list">1.</button>
           <button type="button" data-cmd="quote" title="Quote" aria-label="Quote">❝</button>
           <button type="button" data-cmd="clear" title="Clear formatting" aria-label="Clear formatting">⌫</button>
+          <span class="rich-sep" aria-hidden="true"></span>
+          <button type="button" data-cmd="smaller" class="rich-size small" title="Smaller text (⇧⌘,)" aria-label="Smaller text">A−</button>
+          <button type="button" data-cmd="bigger" class="rich-size" title="Larger text (⇧⌘.)" aria-label="Larger text">A+</button>
         </div>
         <div class="rich-area" id="richEditArea" contenteditable="true" spellcheck="false"
              role="textbox" aria-multiline="true" aria-label="Rich text block"></div>

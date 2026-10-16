@@ -17,7 +17,7 @@ import {
 } from '../features/drawings.js';
 import {
   activeFill, activeFont, activeTheme, attachEditor, setTheme, activeScene, activeTool, canRedo, canUndo,
-  addRich, changeTextSize, clearSelection, commitEditing, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
+  activeFontScale, addRich, changeTextSize, clearSelection, commitEditing, commitText, copySelection, cutSelection, isToolLocked, onTextInput,
   pasteClipboard, reorderSelection, richFormat, setFill, setFont, setToolLocked,
   deleteSelection, detachSelection, duplicateSelection, editSelectionText, fitView,
   flushSave, hideTextEditor, isEditingText, loadScene, nudgeSelection, onTextBlur, redo,
@@ -194,6 +194,9 @@ export function syncToolbar() {
   /* Focus mode shows the style pickers only when there is something to style. */
   $('#view-canvas .ctoolbar').dataset.styling = String(chosen.length > 0 || activeTool() !== 'select');
   $('#cName').value = scene ? scene.name : '';
+  const scales = new Set(chosen.filter(s => s.kind !== 'arrow' || s.text).map(s => s.fontScale || 1));
+  const scale = chosen.length ? (scales.size === 1 ? [...scales][0] : null) : activeFontScale();
+  $('#cTextSize').textContent = scale == null ? '–' : Math.round(scale * 100) + '%';
   $('#cZoom').textContent = scene ? Math.round(scene.view.zoom * 100) + '%' : '';
   $('#cCount').textContent = scene
     ? (chosen.length
@@ -354,7 +357,17 @@ $('#drawingInput').addEventListener('change', e => { importFiles(e.target.files)
 
 $('#textEditArea').addEventListener('blur', onTextBlur);
 $('#textEditArea').addEventListener('input', onTextInput);
+/** ⇧⌘. / ⇧⌘, step the text size — in the editors and on the canvas alike. */
+function textSizeKey(e) {
+  if (!(e.metaKey || e.ctrlKey) || !e.shiftKey) return false;
+  if (e.code !== 'Period' && e.code !== 'Comma') return false;
+  e.preventDefault();
+  changeTextSize(e.code === 'Period' ? 1.15 : 1 / 1.15);
+  return true;
+}
+
 $('#textEditArea').addEventListener('keydown', e => {
+  if (textSizeKey(e)) return;
   if (e.key === 'Escape') { e.stopPropagation(); hideTextEditor(); }
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitText(); }
 });
@@ -370,6 +383,7 @@ document.addEventListener('keydown', e => {
   if (isEditingText()) return;
 
   const mod = e.metaKey || e.ctrlKey;
+  if (textSizeKey(e)) return;
   if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); duplicateSelection(); return; }
   if (mod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); selectAll(); return; }
@@ -419,6 +433,7 @@ $('#richEditArea').addEventListener('blur', e => {
   commitEditing();
 });
 $('#richEditArea').addEventListener('keydown', e => {
+  if (textSizeKey(e)) { e.stopPropagation(); return; }
   if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); commitEditing(); }
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitEditing(); }
   /* Keep editing shortcuts (bold/italic) from reaching the canvas handler. */

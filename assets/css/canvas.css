@@ -203,6 +203,10 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
 .ctextsize button:last-child { font-size: 17px; }
 .ctextsize button:hover { color: var(--ink); background: var(--surface); }
 .ctextsize button:active { color: var(--accent-ink); }
+.ctextsize-val {
+  min-width: 3.2em; text-align: center; font-size: 11px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
 
 #scene .note-edge { pointer-events: all; }
 #scene .handle[data-handle="nw"], #scene .handle[data-handle="se"] { cursor: nwse-resize; }
@@ -211,7 +215,7 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
 /* The inline editor mirrors the shape it is editing. Vertical centring is
    done in JS by padding — `align-content` is too new to rely on, and mixing
    the two would double-count. */
-.text-edit textarea { overflow: hidden; }
+.text-edit textarea { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 .text-edit[data-kind="container"] textarea,
 .text-edit[data-kind="text"] textarea { text-align: left; }
 
@@ -269,8 +273,10 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
   font-family: Inter, -apple-system, "Segoe UI", Helvetica, sans-serif;
   font-size: 14px; line-height: 1.45; color: var(--ink);
   background: var(--surface); border: 1px dashed var(--accent); border-radius: 10px;
-  outline: none; overflow-wrap: anywhere; overflow: auto;
+  outline: none; overflow-wrap: anywhere; overflow: auto; overscroll-behavior: contain;
 }
+.rich-area > :first-child { margin-top: 0; }
+.rich-area p { margin: 0 0 .5em; }
 .rich-area:empty::before { content: "Type, or paste text or an image…"; color: var(--ink-3); }
 .canvas-host[data-theme="dark"] .rich-area { color: #e9e7e1; caret-color: #e9e7e1; background: #26272b; border-color: #6ea8c8; }
 
@@ -287,6 +293,8 @@ body.zen[data-view="canvas"] .zen-exit { display: none; }
   font-size: 12.5px; color: var(--ink-2); line-height: 1;
 }
 .rich-format button:hover { background: var(--surface); color: var(--ink); }
+.rich-format .rich-size { font-weight: 600; font-size: 13.5px; }
+.rich-format .rich-size.small { font-size: 11px; }
 .rich-format .rich-sep { width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
 
 /* ---------- Alignment guides, tool lock, shortcuts ---------- */

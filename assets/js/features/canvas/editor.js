@@ -186,7 +186,8 @@ const clampScale = (v) => Math.min(4, Math.max(0.4, Math.round(v * 100) / 100));
  * with, so the next thing you type comes out at the chosen size.
  */
 export function changeTextSize(factor) {
-  const chosen = selectedShapes().filter(s => s.kind !== 'arrow' || s.text);
+  const editing = editingId && scene ? shapeById(scene, editingId) : null;
+  const chosen = editing ? [editing] : selectedShapes().filter(s => s.kind !== 'arrow' || s.text);
   if (chosen.length) {
     commit(() => {
       chosen.forEach(s => { s.fontScale = clampScale((s.fontScale || 1) * factor); fitText(s); });
@@ -197,7 +198,16 @@ export function changeTextSize(factor) {
     writePref('fontScale', fontScaleDefault);
     onChange();
   }
-  if (isEditingText()) refreshEditorFont();
+  followEditor();
+}
+
+/** Keep the open editor (either kind) glued to its shape after a pan, zoom or resize. */
+function followEditor() {
+  if (!editingId || !scene) return;
+  const shape = shapeById(scene, editingId);
+  if (!shape) return;
+  if (!$('#richEdit').hidden) placeRichEditor(shape);
+  else if (!$('#textEdit').hidden) { refreshEditorFont(); onTextInput(); }
 }
 
 /* ---------- History and saving ---------- */
@@ -334,6 +344,7 @@ export function paintViewport() {
   const w = (r.width || 800) / scene.view.zoom;
   const h = (r.height || 600) / scene.view.zoom;
   svg.setAttribute('viewBox', scene.view.x + ' ' + scene.view.y + ' ' + w + ' ' + h);
+  followEditor();
 }
 
 export function render() {
@@ -362,6 +373,7 @@ export function render() {
 
   svg.replaceChildren(frag);
   $('#canvasEmpty').hidden = scene.shapes.length > 0;
+  followEditor();
 }
 
 /** The thin lines that appear when a shape lines up with its neighbours. */
@@ -572,6 +584,7 @@ function cardLayout(s) {
 /* ---------- Rich text blocks ---------- */
 
 const RICH_PAD = 12;              // gap between the block's border and its HTML
+const richFontPx = (s) => CANVAS_FONT * (s.fontScale || 1);
 
 /** A rich block's formatted HTML, laid into the SVG with a foreignObject so it
     pans and zooms with the drawing and travels into an exported SVG. */
@@ -584,6 +597,7 @@ function richBody(s) {
   div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
   div.className = 'rich-content';
   div.style.color = s.ink;
+  div.style.fontSize = richFontPx(s) + 'px';
   div.innerHTML = s.html || '<p class="rich-placeholder">Type, or paste text or an image…</p>';
   fo.appendChild(div);
   return fo;
@@ -637,6 +651,7 @@ function selectionLayer(chosen) {
   return g;
 }
 
+const DRAG_START = 6;            // px on screen a draw tool must travel before it draws
 const SNAP_TOL = 6;              // px on screen before a shape lines up with a neighbour
 
 const CORNERS = ['nw', 'ne', 'se', 'sw'];
@@ -706,6 +721,7 @@ function onPointerDown(e) {
        also what lets double-click reach the text editor with a draw tool up. */
     drag = {
       mode: 'create', kind: tool, start: point, before: serialize(scene),
+      client: { x: e.clientX, y: e.clientY }, dragged: false,
       over: shapeAt(scene, point.x, point.y),
       preview: makeShape(tool, snap(point.x), snap(point.y), snap(point.x), snap(point.y), ink, newStyle(tool))
     };
@@ -794,6 +810,10 @@ function onPointerMove(e) {
   }
 
   if (drag.mode === 'create') {
+    if (!drag.dragged) {
+      if (Math.hypot(e.clientX - drag.client.x, e.clientY - drag.client.y) < DRAG_START) return;
+      drag.dragged = true;
+    }
     let x1 = point.x, y1 = point.y;
     if (e.shiftKey) {
       const fixed = drag.kind === 'arrow'
@@ -932,14 +952,16 @@ function onPointerUp() {
   }
 
   if (finished.mode === 'create') {
-    const b = bounds(finished.preview);
-    const tiny = b.w < MIN_SHAPE && b.h < MIN_SHAPE;
-    if (tiny && finished.over) {                  // a click on something: select it
-      selectedIds = new Set([finished.over.id]);
+    /* A tap is not a drawing: it selects what's under it, or clears the
+       selection — only a real drag puts a new shape down. */
+    if (!finished.dragged) {
+      selectedIds = finished.over ? new Set([finished.over.id]) : new Set();
       render();
       onChange();
       return;
     }
+    const b = bounds(finished.preview);
+    const tiny = b.w < MIN_SHAPE && b.h < MIN_SHAPE;
     const shape = tiny
       ? defaultSized(finished.kind, snap(finished.start.x), snap(finished.start.y), ink, newStyle(finished.kind))
       : finished.preview;
@@ -1001,6 +1023,7 @@ addEventListener('keyup', e => {
 
 function onWheel(e) {
   if (!scene) return;
+  if (inTextEditor(e) && !(e.ctrlKey || e.metaKey)) return;   // let a long text scroll
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     zoomBy(e.deltaY < 0 ? 1.12 : 1 / 1.12, { x: e.clientX, y: e.clientY });
@@ -1106,7 +1129,8 @@ function placeEditor(shape) {
   wrap.style.left = Math.round(left) + 'px';
   wrap.style.top = Math.round(isLabel ? top + 4 : top) + 'px';
   wrap.style.width = Math.round(Math.max(shape.kind === 'text' ? 40 : 130, box.w * z)) + 'px';
-  wrap.style.height = Math.round(Math.max(36, (isLabel ? 36 : box.h) * z)) + 'px';
+  const room = hostRect().height - Math.max(0, top) - 8;
+  wrap.style.height = Math.round(Math.max(36, Math.min((isLabel ? 36 : box.h) * z, room))) + 'px';
 }
 
 /**
@@ -1211,6 +1235,7 @@ function fitRich(shape) {
     document.body.appendChild(richMeasurer);
   }
   richMeasurer.style.width = Math.max(40, shape.w - RICH_PAD * 2) + 'px';
+  richMeasurer.style.fontSize = richFontPx(shape) + 'px';
   richMeasurer.innerHTML = shape.html || '<p>Text</p>';
   shape.h = Math.max(MIN_RICH_H, Math.ceil(richMeasurer.scrollHeight + RICH_PAD * 2));
 }
@@ -1275,8 +1300,15 @@ function placeRichEditor(shape) {
   wrap.style.left = Math.round((b.x - scene.view.x) * z) + 'px';
   wrap.style.top = Math.round((b.y - scene.view.y) * z) + 'px';
   wrap.style.width = Math.round(Math.max(120, b.w * z)) + 'px';
-  wrap.style.minHeight = Math.round(Math.max(44, b.h * z)) + 'px';
-  $('#richEditArea').style.padding = Math.round(RICH_PAD * z) + 'px';
+  /* The editable area itself fills the whole block — no empty band under it —
+     and stops at the bottom of the visible canvas, scrolling past that. */
+  const area = $('#richEditArea');
+  const top = (b.y - scene.view.y) * z;
+  const room = Math.max(80, hostRect().height - Math.max(0, top) - 8);
+  area.style.minHeight = Math.round(Math.min(Math.max(44, b.h * z), room)) + 'px';
+  area.style.maxHeight = Math.round(room) + 'px';
+  area.style.padding = Math.round(RICH_PAD * z) + 'px';
+  area.style.fontSize = (richFontPx(shape) * z).toFixed(1) + 'px';
 }
 
 function placeCaretEnd(node) {
@@ -1324,6 +1356,7 @@ export function richFormat(cmd) {
   if (!area || $('#richEdit').hidden) return;
   area.focus();
   const run = (c, v) => { try { document.execCommand(c, false, v); } catch (err) { /* unsupported */ } };
+  if (cmd === 'bigger' || cmd === 'smaller') { changeTextSize(cmd === 'bigger' ? 1.15 : 1 / 1.15); return; }
   if (cmd === 'h1' || cmd === 'h2' || cmd === 'h3') run('formatBlock', cmd.toUpperCase());
   else if (cmd === 'p') run('formatBlock', 'P');
   else if (cmd === 'ul') run('insertUnorderedList');
