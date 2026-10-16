@@ -578,9 +578,9 @@ function syncChrome() {
   $('#cFileB').textContent = sideB ? shortName(sideB.name) || 'Pasted text' : 'Nothing chosen';
   $('#cMetaA').textContent = sideA ? sideMeta(sideA, result && result.a) : '';
   $('#cMetaB').textContent = sideB ? sideMeta(sideB, result && result.b) : '';
-  $('#cName').value = name;
-  $('#cName').disabled = !both;
-  $('#cName').placeholder = both ? deriveCompareName(sideA, sideB) : 'Untitled comparison';
+  $('#cmpName').value = name;
+  $('#cmpName').disabled = !both;
+  $('#cmpName').placeholder = both ? deriveCompareName(sideA, sideB) : 'Untitled comparison';
 
   $('#cStrategy').value = opts.strategy || 'auto';
   $('#cAlgo').value = opts.algo || 'histogram';
@@ -854,8 +854,8 @@ $('#cEmptySample').addEventListener('click', () => {
   );
 });
 
-$('#cName').addEventListener('change', () => {
-  name = $('#cName').value.trim();
+$('#cmpName').addEventListener('change', () => {
+  name = $('#cmpName').value.trim();
   if (recId) updateCompare(recId, { name: name || deriveCompareName(sideA, sideB) });
 });
 
@@ -1028,6 +1028,9 @@ document.addEventListener('keydown', e => {
 on(EVENTS.COMPARES, () => { renderCompares(); syncChrome(); });
 on(EVENTS.VIEW, viewName => {
   if (viewName !== 'compare') return;
+  /* Arriving with nothing open (a refresh on #compare) reopens the latest one. */
+  const latest = recId === null && !sideA && !sideB && comparesByRecency()[0];
+  if (latest) { openCompare(latest.id); return; }
   build();
   /* The panes had no height while the view was hidden, so nothing was drawn. */
   virtA.paint(true);

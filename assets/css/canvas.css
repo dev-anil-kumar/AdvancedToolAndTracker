@@ -135,7 +135,7 @@ body.zen .ctoolbar {
   width: max-content; max-width: calc(100% - 32px);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--pop);
 }
-body.zen .ctoolbar > :is(.csep, .spacer, #cName, .cmeta, #cLabel, #cDetach, #cFront, #cBack,
+body.zen .ctoolbar > :is(.csep, .spacer, .cmeta, #cLabel, #cDetach, #cFront, #cBack,
   #cZoomOut, #cZoomIn, #cFit, #cNew, #cImport, #cExportJson, #cExportSvg, #cExportPng, #cTheme, #cHelp) { display: none; }
 body.zen .ctoolbar[data-styling="false"] :is(#cInks, #cFills, #cFonts, .ctextsize) { display: none; }
 body.zen[data-view="canvas"] .zen-exit { display: none; }

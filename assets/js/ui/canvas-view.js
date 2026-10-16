@@ -419,9 +419,23 @@ $('#canvasHost').addEventListener('drop', e => {
 
 on(EVENTS.DRAWINGS, renderDrawings);
 on(EVENTS.VIEW, name => {
+  /* Arriving with nothing open (a refresh on #canvas) reopens the latest drawing. */
+  if (name === 'canvas' && !activeScene()) {
+    const latest = drawingsByRecency()[0];
+    if (latest) { openDrawing(latest.id); return; }
+  }
   if (name === 'canvas' && activeScene()) requestAnimationFrame(render);
   if (name !== 'canvas' && activeScene()) { commitEditing(); flushSave(); }
 });
+
+/* A refresh or a closed tab must not lose the last few strokes. */
+function saveBeforeLeaving() {
+  if (!activeScene()) return;
+  commitEditing();
+  if (saveStatus() === 'editing') flushSave();
+}
+addEventListener('pagehide', saveBeforeLeaving);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveBeforeLeaving(); });
 
 /* ---------- Rich text block: inline editor + per-word formatting ---------- */
 

@@ -585,6 +585,9 @@ function syncStatus() {
   const open = docId !== null;
   $('#writeToolbar').hidden = !open;
   $('#writeStatus').hidden = !open;
+  $('#writeName').hidden = !open;
+  const rec = currentDoc();
+  if (rec && document.activeElement !== $('#writeName')) $('#writeName').value = rec.name;
   if (!open) {
     ['writeWords', 'writeChars', 'writeReadTime', 'writeSaved'].forEach(id => { $('#' + id).textContent = ''; });
     return;
@@ -954,12 +957,27 @@ function openShortcutsDialog() {
   if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
 }
 
+/* ---------- Title ---------- */
+
+$('#writeName').addEventListener('change', () => {
+  if (docId !== null) renameWriteDoc(docId, $('#writeName').value);
+});
+$('#writeName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); sheetEl.focus(); }
+  if (e.key === 'Escape') { e.preventDefault(); $('#writeName').value = currentDoc()?.name || ''; sheetEl.focus(); }
+});
+
 /* ---------- Bus ---------- */
 
 /* The bus fires on every autosave tick, wherever it was triggered from — the
    toolbar only exists once build() has run, which is only once the Write
    view has been opened at least once. */
-on(EVENTS.WRITEDOCS, () => { renderWriteDocs(); if (ready) syncToolbar(); });
+on(EVENTS.WRITEDOCS, () => {
+  renderWriteDocs();
+  if (ready) syncToolbar();
+  const rec = currentDoc();
+  if (rec && document.activeElement !== $('#writeName')) $('#writeName').value = rec.name;
+});
 on(EVENTS.VIEW, name => {
   if (name === 'write') {
     build();
@@ -972,3 +990,5 @@ on(EVENTS.VIEW, name => {
     syncToolbar();
   } else if (docId !== null) flushWrite();
 });
+addEventListener('pagehide', () => { flushWrite(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushWrite(); });

@@ -521,6 +521,12 @@ document.addEventListener('keydown', e => {
 
 on(EVENTS.HTMLDOCS, () => { renderHtmlDocs(); syncToolbar(); });
 on(EVENTS.VIEW, name => {
-  if (name === 'html') { build(); render(); }
+  if (name === 'html') {
+    const latest = docId === null && htmlDocsByRecency()[0];
+    if (latest) { openHtmlDoc(latest.id); return; }
+    build(); render();
+  }
   else if (docId !== null) flushHtml();
 });
+addEventListener('pagehide', () => { flushHtml(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushHtml(); });

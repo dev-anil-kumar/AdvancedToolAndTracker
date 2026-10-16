@@ -859,6 +859,12 @@ document.addEventListener('keydown', e => {
 
 on(EVENTS.JSONDOCS, () => { renderJsonDocs(); syncToolbar(); });
 on(EVENTS.VIEW, name => {
-  if (name === 'json') { build(); render(); }
+  if (name === 'json') {
+    const latest = docId === null && jsonDocsByRecency()[0];
+    if (latest) { openJsonDoc(latest.id); return; }
+    build(); render();
+  }
   else if (docId !== null) flushJson();
 });
+addEventListener('pagehide', () => { flushJson(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushJson(); });

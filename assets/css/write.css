@@ -48,6 +48,13 @@
 /* ---------- Main column ---------- */
 .write-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
 
+.write-title{
+  flex:none;font:inherit;font-size:15px;font-weight:600;color:var(--ink);
+  margin:8px clamp(8px,2vw,14px) 0;padding:5px 8px;border-radius:7px;
+  background:transparent;border:1px solid transparent;
+}
+.write-title:hover{border-color:var(--line)}
+.write-title:focus{background:var(--surface);border-color:var(--line-strong);outline:none}
 .write-toolbar{
   flex:none;display:flex;align-items:center;gap:2px;flex-wrap:nowrap;overflow-x:auto;
   padding:6px clamp(8px,2vw,14px);border-bottom:1px solid var(--line);background:var(--bg);
