@@ -551,20 +551,24 @@ function textNode(s, cx, cy, anchor, badge, faded) {
   const blockLift = ((lines.length - 1) * lineHeight) / 2;
   const top = centred ? cy - blockLift + size * CAP_CENTRE : cy;
 
-  const text = svgEl('text', {
-    x: cx, y: top.toFixed(2),
+  const group = svgEl('g', {
     'text-anchor': anchor,
-    'xml:space': 'preserve',            // keep leading spaces and indentation
     fill: faded ? 'var(--ink-3)' : s.ink,
     'font-size': size.toFixed(1),
     'font-family': font.stack,
     'font-weight': s.kind === 'container' || s.bold ? 600 : 400,
     class: 'label' + (badge ? ' badge' : '')
   });
+  /* One <text> per line at an absolute y, not tspans with dy: an empty tspan
+     carries no glyph for its dy to move, so blank lines vanished, and some
+     engines drop a tspan's x and run the lines together. */
   lines.forEach((line, i) => {
-    text.appendChild(svgEl('tspan', { x: cx, dy: i === 0 ? 0 : lineHeight })).textContent = line;
+    group.appendChild(svgEl('text', {
+      x: cx, y: (top + i * lineHeight).toFixed(2),
+      'xml:space': 'preserve'           // keep leading spaces and indentation
+    })).textContent = line;
   });
-  return text;
+  return group;
 }
 
 /** A shape's rendered text size — font tweak times its own size step. */
